@@ -25,7 +25,11 @@ impl CjkFonts {
         }
         // With a CJK language the system font leads, so Latin and CJK share one baseline.
         let cjk_first = lang.is_cjk();
-        let primary = if cjk_first { lang } else { self.applied.map(|a| a.0).unwrap_or(Lang::Zh) };
+        let primary = if cjk_first {
+            lang
+        } else {
+            self.applied.map(|a| a.0).unwrap_or(Lang::Zh)
+        };
         if self.applied == Some((primary, cjk_first)) {
             return;
         }
@@ -54,7 +58,10 @@ impl CjkFonts {
         } else {
             prop.extend(names.iter().cloned());
         }
-        defs.families.entry(FontFamily::Monospace).or_default().extend(names.iter().cloned());
+        defs.families
+            .entry(FontFamily::Monospace)
+            .or_default()
+            .extend(names.iter().cloned());
         ctx.set_fonts(defs);
     }
 }
@@ -80,7 +87,8 @@ fn candidates(lang: Lang) -> Vec<(PathBuf, u32)> {
         };
         out.extend(files.iter().map(|f| (dir.join(f), 0)));
     } else if cfg!(target_os = "windows") {
-        let dir = PathBuf::from(std::env::var_os("WINDIR").unwrap_or_else(|| "C:\\Windows".into())).join("Fonts");
+        let dir = PathBuf::from(std::env::var_os("WINDIR").unwrap_or_else(|| "C:\\Windows".into()))
+            .join("Fonts");
         let files: &[&str] = match lang {
             Lang::Ja => &["YuGothM.ttc", "meiryo.ttc", "msgothic.ttc"],
             Lang::Ko => &["malgun.ttf", "gulim.ttc"],
@@ -94,13 +102,21 @@ fn candidates(lang: Lang) -> Vec<(PathBuf, u32)> {
             Lang::Ko => 1,
             _ => 2,
         };
-        for dir in ["/usr/share/fonts/opentype/noto", "/usr/share/fonts/noto-cjk", "/usr/share/fonts/google-noto-cjk", "/usr/share/fonts/OTF"] {
+        for dir in [
+            "/usr/share/fonts/opentype/noto",
+            "/usr/share/fonts/noto-cjk",
+            "/usr/share/fonts/google-noto-cjk",
+            "/usr/share/fonts/OTF",
+        ] {
             out.push((PathBuf::from(dir).join("NotoSansCJK-Regular.ttc"), index));
         }
         let extra: &[&str] = match lang {
             Lang::Ja => &["/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf"],
             Lang::Ko => &["/usr/share/fonts/truetype/nanum/NanumGothic.ttf"],
-            _ => &["/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", "/usr/share/fonts/wenquanyi/wqy-microhei/wqy-microhei.ttc"],
+            _ => &[
+                "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+                "/usr/share/fonts/wenquanyi/wqy-microhei/wqy-microhei.ttc",
+            ],
         };
         out.extend(extra.iter().map(|f| (PathBuf::from(f), 0)));
     }

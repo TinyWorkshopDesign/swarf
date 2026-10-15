@@ -1,0 +1,78 @@
+name: release
+
+# Push a tag such as v0.1.0 to build every platform and publish a GitHub release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - run: cargo test --release
+      - run: cargo build --release --target aarch64-apple-darwin
+      - run: cargo build --release --target x86_64-apple-darwin
+      - name: Universal app bundle
+        run: |
+          lipo -create -output target/release/swarf-universal \
+            target/aarch64-apple-darwin/release/swarf target/x86_64-apple-darwin/release/swarf
+          BIN=target/release/swarf-universal ./scripts/bundle_macos.sh
+          cd target/release && ditto -c -k --keepParent Swarf.app "Swarf-${GITHUB_REF_NAME}-macos.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: target/release/Swarf-*-macos.zip
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --release
+      - run: cargo build --release
+      - name: Package
+        shell: pwsh
+        run: Compress-Archive -Path target/release/swarf.exe, LICENSE, README.md -DestinationPath "Swarf-$env:GITHUB_REF_NAME-windows-x64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: Swarf-*-windows-x64.zip
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libgl1-mesa-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev
+      - run: cargo test --release
+      - run: cargo build --release
+      - name: Package
+        run: |
+          DIR="Swarf-${GITHUB_REF_NAME}-linux-x64"
+          mkdir "$DIR"
+          cp target/release/swarf assets/swarf.desktop LICENSE README.md "$DIR/"
+          cp assets/icon-256.png "$DIR/swarf.png"
+          tar -czf "$DIR.tar.gz" "$DIR"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: Swarf-*-linux-x64.tar.gz
+
+  publish:
+    needs: [macos, windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: Swarf-*
+          generate_release_notes: true

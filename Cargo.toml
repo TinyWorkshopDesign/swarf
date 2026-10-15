@@ -3,6 +3,13 @@ name = "swarf"
 version = "0.1.0"
 edition = "2024"
 description = "Speeds and feeds calculator for CNC milling and drilling"
+license = "GPL-3.0-or-later"
+authors = ["Michele Belleri"]
+repository = "https://github.com/OWNER/swarf"
+readme = "README.md"
+keywords = ["cnc", "machining", "milling", "feeds-and-speeds", "egui"]
+categories = ["science", "gui"]
+rust-version = "1.95"
 
 [dependencies]
 eframe = { version = "0.36.2", default-features = false, features = ["default_fonts", "glow", "persistence", "wayland", "x11"] }

@@ -146,7 +146,11 @@ impl Tweaks {
     }
     pub fn fz_factor(&self) -> f64 {
         let f = self.finish.clamp(-1.0, 1.0);
-        if f < 0.0 { 1.0 + f * 0.4 } else { 1.0 + f * 0.3 }
+        if f < 0.0 {
+            1.0 + f * 0.4
+        } else {
+            1.0 + f * 0.3
+        }
     }
 }
 
@@ -262,21 +266,48 @@ pub enum Msg {
     HssNotSuitable,
     AlTiNOnAluminium,
     DiamondOnFerrous,
-    PowerShort { need_kw: f64, avail_kw: f64, rpm: f64 },
-    DeepHole { ratio: f64, peck: f64 },
+    PowerShort {
+        need_kw: f64,
+        avail_kw: f64,
+        rpm: f64,
+    },
+    DeepHole {
+        ratio: f64,
+        peck: f64,
+    },
     Over8D,
-    VBitTooDeep { ap: f64 },
-    ThinChip { chip: f64, metal: bool },
+    VBitTooDeep {
+        ap: f64,
+    },
+    ThinChip {
+        chip: f64,
+        metal: bool,
+    },
     DeflectionHalvesFeed,
     PowerHalvesFeed,
-    Deflection { um: f64, limit_um: f64 },
-    ApOverFlute { flute: f64 },
-    LongStickout { ratio: f64 },
+    Deflection {
+        um: f64,
+        limit_um: f64,
+    },
+    ApOverFlute {
+        flute: f64,
+    },
+    LongStickout {
+        ratio: f64,
+    },
     StickoutShorterThanFlute,
-    TooManyFlutesInAlSlot { z: u32 },
+    TooManyFlutesInAlSlot {
+        z: u32,
+    },
     DeepSlot,
-    RpmCapped { vc: f64, pct: f64 },
-    RpmMinTooHigh { vc: f64, target: f64 },
+    RpmCapped {
+        vc: f64,
+        pct: f64,
+    },
+    RpmMinTooHigh {
+        vc: f64,
+        target: f64,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -301,21 +332,35 @@ pub enum Step {
     Drilling,
     Coating(Coating),
     FullSlot,
-    Engagement { pct: f64, cooler: bool },
+    Engagement {
+        pct: f64,
+        cooler: bool,
+    },
     LifeTweak,
     VcTarget,
     EffectiveDiameter,
-    FzBase { cf: f64 },
+    FzBase {
+        cf: f64,
+    },
     FzBaseInsert,
-    FzFactors { tool: f64, rigidity: f64, tweak: f64, slot: bool },
+    FzFactors {
+        tool: f64,
+        rigidity: f64,
+        tweak: f64,
+        slot: bool,
+    },
     ChipTarget,
     RadialThinning,
     BallThinning,
-    LeadThinning { kappa: f64 },
+    LeadThinning {
+        kappa: f64,
+    },
     ThinningCapped,
     Reduction(Limiter),
     FzProgrammed,
-    FnBase { cf: f64 },
+    FnBase {
+        cf: f64,
+    },
     FnFactors,
     FnTarget,
 }
@@ -393,7 +438,11 @@ impl Outcome {
             Some(dr) => {
                 let depth = trim_num(dr.depth, 3);
                 match dr.peck {
-                    Some(q) => format!("{s}G83 Z-{depth} R1. Q{} F{}", trim_num(q, 1), self.feed.round() as i64),
+                    Some(q) => format!(
+                        "{s}G83 Z-{depth} R1. Q{} F{}",
+                        trim_num(q, 1),
+                        self.feed.round() as i64
+                    ),
                     None => format!("{s}G81 Z-{depth} R1. F{}", self.feed.round() as i64),
                 }
             }
@@ -409,11 +458,19 @@ impl Outcome {
 fn trim_num(v: f64, dec: usize) -> String {
     let s = format!("{v:.dec$}");
     let s = s.trim_end_matches('0').trim_end_matches('.');
-    if s.contains('.') { s.to_string() } else { format!("{s}.") }
+    if s.contains('.') {
+        s.to_string()
+    } else {
+        format!("{s}.")
+    }
 }
 
 fn dterm(d: f64) -> f64 {
-    if d <= 12.0 { d } else { 12.0 * (d / 12.0).sqrt() }
+    if d <= 12.0 {
+        d
+    } else {
+        12.0 * (d / 12.0).sqrt()
+    }
 }
 
 /// Tip deflection of a two-segment cantilever: shank Ø ds and flutes as 0.8·Ø.
@@ -431,10 +488,22 @@ struct Log {
 
 impl Log {
     fn row(&mut self, step: Step, value: f64, unit: Unit, decimals: usize) {
-        self.why.push(Row { step, value, unit, decimals, total: false });
+        self.why.push(Row {
+            step,
+            value,
+            unit,
+            decimals,
+            total: false,
+        });
     }
     fn total(&mut self, step: Step, value: f64, unit: Unit, decimals: usize) {
-        self.why.push(Row { step, value, unit, decimals, total: true });
+        self.why.push(Row {
+            step,
+            value,
+            unit,
+            decimals,
+            total: true,
+        });
     }
     fn factor(&mut self, step: Step, value: f64) {
         self.row(step, value, Unit::Factor, 2);
@@ -454,12 +523,19 @@ pub fn compute(s: &Setup) -> Outcome {
     let metal = g.is_metal();
     let tool = &s.tool;
     let mach = &s.machine;
-    let mut log = Log { why: Vec::new(), warnings: Vec::new() };
+    let mut log = Log {
+        why: Vec::new(),
+        warnings: Vec::new(),
+    };
 
     let d = tool.d.max(0.1);
     let life_m = s.tweaks.vc_factor();
     let fin_m = s.tweaks.fz_factor();
-    let tm_f = if tool.material == ToolMaterial::Carbide { 1.0 } else { 0.8 };
+    let tm_f = if tool.material == ToolMaterial::Carbide {
+        1.0
+    } else {
+        0.8
+    };
     let rigid_f = if metal { mach.rigidity.factor() } else { 1.0 };
 
     let mut vc_base = match tool.material {
@@ -511,7 +587,12 @@ pub fn compute(s: &Setup) -> Outcome {
         let n = clamp_rpm(vc_t * 1000.0 / (PI * d), &mut limiters);
         let vc = PI * d * n / 1000.0;
         let fn_t = m.cf * 2.5 * dterm(d) * tm_f * rigid_f * fin_m;
-        log.row(Step::FnBase { cf: m.cf * 2.5 }, m.cf * 2.5 * dterm(d), Unit::MmPerRev, 3);
+        log.row(
+            Step::FnBase { cf: m.cf * 2.5 },
+            m.cf * 2.5 * dterm(d),
+            Unit::MmPerRev,
+            3,
+        );
         log.factor(Step::FnFactors, tm_f * rigid_f * fin_m);
         log.total(Step::FnTarget, fn_t, Unit::MmPerRev, 3);
 
@@ -545,7 +626,14 @@ pub fn compute(s: &Setup) -> Outcome {
         let ratio = depth / d;
         let peck = (ratio > 3.0).then(|| d * if g == Iso::N { 1.5 } else { 1.0 });
         if pc > pav * 1.001 {
-            log.warn(Level::Crit, Msg::PowerShort { need_kw: pc / SPINDLE_EFF, avail_kw: pav / SPINDLE_EFF, rpm: n });
+            log.warn(
+                Level::Crit,
+                Msg::PowerShort {
+                    need_kw: pc / SPINDLE_EFF,
+                    avail_kw: pav / SPINDLE_EFF,
+                    rpm: n,
+                },
+            );
         }
         if let Some(q) = peck {
             log.warn(Level::Info, Msg::DeepHole { ratio, peck: q });
@@ -584,7 +672,12 @@ pub fn compute(s: &Setup) -> Outcome {
             limiters,
             warnings,
             why,
-            drill: Some(DrillInfo { thrust_n: thrust, time_s: depth / vf * 60.0, depth, peck }),
+            drill: Some(DrillInfo {
+                thrust_n: thrust,
+                time_s: depth / vf * 60.0,
+                depth,
+                peck,
+            }),
         };
     }
 
@@ -644,7 +737,13 @@ pub fn compute(s: &Setup) -> Outcome {
     if rr >= 0.99 {
         log.factor(Step::FullSlot, ae_boost);
     } else {
-        log.factor(Step::Engagement { pct: rr * 100.0, cooler: rr < 0.5 }, ae_boost);
+        log.factor(
+            Step::Engagement {
+                pct: rr * 100.0,
+                cooler: rr < 0.5,
+            },
+            ae_boost,
+        );
     }
     log.factor(Step::LifeTweak, life_m);
     log.total(Step::VcTarget, vc_t, Unit::MPerMin, 0);
@@ -655,7 +754,11 @@ pub fn compute(s: &Setup) -> Outcome {
     let n = clamp_rpm(vc_t * 1000.0 / (PI * d_eff), &mut limiters);
     let vc = PI * d_eff * n / 1000.0;
 
-    let fz_base = if tool.kind == ToolKind::Face { g.face_fz() } else { m.cf * dterm(d) };
+    let fz_base = if tool.kind == ToolKind::Face {
+        g.face_fz()
+    } else {
+        m.cf * dterm(d)
+    };
     let slot = rr >= 0.99;
     let slot_f = if slot { 0.85 } else { 1.0 };
     let fz_t = fz_base * tm_f * rigid_f * fin_m * slot_f;
@@ -664,18 +767,38 @@ pub fn compute(s: &Setup) -> Outcome {
     } else {
         log.row(Step::FzBase { cf: m.cf }, fz_base, Unit::Mm, 4);
     }
-    log.factor(Step::FzFactors { tool: tm_f, rigidity: rigid_f, tweak: fin_m, slot }, tm_f * rigid_f * fin_m * slot_f);
+    log.factor(
+        Step::FzFactors {
+            tool: tm_f,
+            rigidity: rigid_f,
+            tweak: fin_m,
+            slot,
+        },
+        tm_f * rigid_f * fin_m * slot_f,
+    );
     log.total(Step::ChipTarget, fz_t, Unit::Mm, 4);
 
-    let rad_t = if rr < 0.5 { 1.0 / (2.0 * (rr - rr * rr).sqrt()) } else { 1.0 };
+    let rad_t = if rr < 0.5 {
+        1.0 / (2.0 * (rr - rr * rr).sqrt())
+    } else {
+        1.0
+    };
     let lead_t = 1.0 / kappa.to_radians().sin();
-    let thin = if s.cut.chip_thinning { (rad_t * lead_t).min(5.0) } else { 1.0 };
+    let thin = if s.cut.chip_thinning {
+        (rad_t * lead_t).min(5.0)
+    } else {
+        1.0
+    };
     if s.cut.chip_thinning && thin > 1.001 {
         if rad_t > 1.001 {
             log.factor(Step::RadialThinning, rad_t);
         }
         if lead_t > 1.001 {
-            let step = if tool.kind == ToolKind::Ball { Step::BallThinning } else { Step::LeadThinning { kappa } };
+            let step = if tool.kind == ToolKind::Ball {
+                Step::BallThinning
+            } else {
+                Step::LeadThinning { kappa }
+            };
             log.factor(step, lead_t);
         }
         if rad_t * lead_t > 5.0 {
@@ -698,7 +821,11 @@ pub fn compute(s: &Setup) -> Outcome {
         let pc = area * vf * kc / 6.0e7;
         let torque = pc * 9549.0 / n;
         let force = 2000.0 * torque / d_eff;
-        let defl = if is_face { 0.0 } else { deflection(force, stick, flute, d, ds, e) };
+        let defl = if is_face {
+            0.0
+        } else {
+            deflection(force, stick, flute, d, ds, e)
+        };
         (vf, kc, pc, torque, force, defl)
     };
     let pav = avail(n);
@@ -727,12 +854,19 @@ pub fn compute(s: &Setup) -> Outcome {
 
     // warnings
     let min_chip = if metal {
-        if tool.material == ToolMaterial::Carbide { 0.008 } else { 0.005 }
+        if tool.material == ToolMaterial::Carbide {
+            0.008
+        } else {
+            0.005
+        }
     } else {
         0.02
     };
     if chip < min_chip {
-        log.warn(if metal { Level::Warn } else { Level::Crit }, Msg::ThinChip { chip, metal });
+        log.warn(
+            if metal { Level::Warn } else { Level::Crit },
+            Msg::ThinChip { chip, metal },
+        );
     }
     if k < 0.6 {
         match reasons.first().map(|r| r.0) {
@@ -742,11 +876,24 @@ pub fn compute(s: &Setup) -> Outcome {
         }
     }
     if pc > pav * 1.001 {
-        log.warn(Level::Crit, Msg::PowerShort { need_kw: pc / SPINDLE_EFF, avail_kw: pav / SPINDLE_EFF, rpm: n });
+        log.warn(
+            Level::Crit,
+            Msg::PowerShort {
+                need_kw: pc / SPINDLE_EFF,
+                avail_kw: pav / SPINDLE_EFF,
+                rpm: n,
+            },
+        );
     }
     if !is_face {
         if defl > dlim * 1.001 {
-            log.warn(Level::Warn, Msg::Deflection { um: defl * 1000.0, limit_um: dlim * 1000.0 });
+            log.warn(
+                Level::Warn,
+                Msg::Deflection {
+                    um: defl * 1000.0,
+                    limit_um: dlim * 1000.0,
+                },
+            );
         }
         if ap > flute {
             log.warn(Level::Crit, Msg::ApOverFlute { flute });
@@ -802,7 +949,13 @@ pub fn compute(s: &Setup) -> Outcome {
 
 fn rpm_warnings(log: &mut Log, n: f64, rpm_max: f64, rpm_min: f64, vc: f64, vc_t: f64) {
     if n >= rpm_max && vc < vc_t * 0.7 {
-        log.warn(Level::Info, Msg::RpmCapped { vc, pct: vc / vc_t * 100.0 });
+        log.warn(
+            Level::Info,
+            Msg::RpmCapped {
+                vc,
+                pct: vc / vc_t * 100.0,
+            },
+        );
     }
     if n <= rpm_min.max(1.0) && vc > vc_t * 1.3 {
         log.warn(Level::Crit, Msg::RpmMinTooHigh { vc, target: vc_t });
@@ -860,7 +1013,10 @@ pub fn sweep(s: &Setup, var: SweepVar, steps: usize) -> Vec<SweepPoint> {
             spindle_kw: o.spindle_kw,
             avail_kw: o.avail_kw,
             feed: o.feed,
-            limited: o.limiters.iter().any(|l| matches!(l, Limiter::Power | Limiter::Deflection | Limiter::FeedMax)),
+            limited: o
+                .limiters
+                .iter()
+                .any(|l| matches!(l, Limiter::Power | Limiter::Deflection | Limiter::FeedMax)),
         });
     }
     out
@@ -896,7 +1052,11 @@ mod tests {
         assert!(close(compute(&s).thinning, 1.0, 1e-9));
         s.cut.ae = s.tool.d * 0.1;
         // 1 / (2·√(0.1 − 0.01)) = 1.6667
-        assert!(close(compute(&s).thinning, 1.0 / (2.0 * 0.09f64.sqrt()), 1e-9));
+        assert!(close(
+            compute(&s).thinning,
+            1.0 / (2.0 * 0.09f64.sqrt()),
+            1e-9
+        ));
     }
 
     #[test]
@@ -911,7 +1071,12 @@ mod tests {
         s.machine = Machine::from_preset(MachinePreset::Bench);
         s.apply_strategy(Strategy::Slot);
         let o = compute(&s);
-        assert!(o.spindle_kw <= o.avail_kw * 1.01, "{} > {}", o.spindle_kw, o.avail_kw);
+        assert!(
+            o.spindle_kw <= o.avail_kw * 1.01,
+            "{} > {}",
+            o.spindle_kw,
+            o.avail_kw
+        );
     }
 
     #[test]
@@ -945,7 +1110,11 @@ mod tests {
         s.cut.ap = 30.0;
         let o = compute(&s);
         assert!(o.gcode().contains("G83"));
-        assert!(o.warnings.iter().any(|w| matches!(w.msg, Msg::DeepHole { .. })));
+        assert!(
+            o.warnings
+                .iter()
+                .any(|w| matches!(w.msg, Msg::DeepHole { .. }))
+        );
         let pc_check = o.fz * o.vc * o.d * o.kc / 240_000.0 / SPINDLE_EFF;
         assert!(close(o.spindle_kw, pc_check, 1e-9));
     }
@@ -963,7 +1132,10 @@ mod tests {
     fn sweep_returns_finite_points() {
         let pts = sweep(&Setup::default(), SweepVar::Radial, 30);
         assert_eq!(pts.len(), 30);
-        assert!(pts.iter().all(|p| p.mrr.is_finite() && p.spindle_kw.is_finite()));
+        assert!(
+            pts.iter()
+                .all(|p| p.mrr.is_finite() && p.spindle_kw.is_finite())
+        );
     }
 
     #[test]

@@ -12,6 +12,13 @@ fn main() -> eframe::Result {
     if let Ok(icon) = eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon-256.png")) {
         viewport = viewport.with_icon(std::sync::Arc::new(icon));
     }
-    let options = eframe::NativeOptions { viewport, ..Default::default() };
-    eframe::run_native(app::APP_NAME, options, Box::new(|cc| Ok(Box::new(app::App::new(cc)))))
+    let options = eframe::NativeOptions {
+        viewport,
+        ..Default::default()
+    };
+    eframe::run_native(
+        app::APP_NAME,
+        options,
+        Box::new(|cc| Ok(Box::new(app::App::new(cc)))),
+    )
 }

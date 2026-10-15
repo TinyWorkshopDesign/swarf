@@ -2,40 +2,26 @@ name: build
 
 on:
   push:
-    branches: [main]
-    tags: ["v*"]
+    branches: [main, master]
   pull_request:
 
 jobs:
-  build:
+  check:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            bin: swarf
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            bin: swarf
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            bin: swarf
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            bin: swarf.exe
+        os: [macos-latest, ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          components: rustfmt
       - name: Linux system libraries
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libgl1-mesa-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev
-      - run: cargo test --release
-      - run: cargo build --release --target ${{ matrix.target }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: swarf-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/${{ matrix.bin }}
+      - name: Formatting
+        if: runner.os == 'Linux'
+        run: cargo fmt --check
+      - run: cargo test
+      - run: cargo build --release

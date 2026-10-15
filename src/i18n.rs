@@ -22,7 +22,16 @@ pub enum Lang {
 pub const LANG_COUNT: usize = 8;
 
 impl Lang {
-    pub const ALL: [Lang; LANG_COUNT] = [Lang::En, Lang::It, Lang::De, Lang::Fr, Lang::Es, Lang::Zh, Lang::Ja, Lang::Ko];
+    pub const ALL: [Lang; LANG_COUNT] = [
+        Lang::En,
+        Lang::It,
+        Lang::De,
+        Lang::Fr,
+        Lang::Es,
+        Lang::Zh,
+        Lang::Ja,
+        Lang::Ko,
+    ];
 
     /// Language name written in that language.
     pub fn native_name(self) -> &'static str {
@@ -44,7 +53,11 @@ impl Lang {
 
     /// Picks a language from a BCP-47 tag such as "it-IT" or "zh-Hans-CN".
     pub fn from_locale(tag: &str) -> Lang {
-        let primary = tag.split(['-', '_', '.']).next().unwrap_or("").to_ascii_lowercase();
+        let primary = tag
+            .split(['-', '_', '.'])
+            .next()
+            .unwrap_or("")
+            .to_ascii_lowercase();
         match primary.as_str() {
             "it" => Lang::It,
             "de" => Lang::De,
@@ -345,31 +358,256 @@ strings! {
 /// Material display names in every language.
 pub fn material_name(lang: Lang, id: &str) -> &'static str {
     let names: [&'static str; LANG_COUNT] = match id {
-        "al6061" => ["Aluminium 6061 / 6082", "Alluminio 6061 / 6082", "Aluminium 6061 / 6082", "Aluminium 6061 / 6082", "Aluminio 6061 / 6082", "铝合金 6061 / 6082", "アルミ 6061 / 6082", "알루미늄 6061 / 6082"],
-        "al7075" => ["Aluminium 7075", "Alluminio 7075 (Ergal)", "Aluminium 7075 (Ergal)", "Aluminium 7075", "Aluminio 7075", "铝合金 7075", "アルミ 7075（超々ジュラルミン）", "알루미늄 7075"],
-        "alcast" => ["Cast aluminium (high Si)", "Alluminio da fusione (alto Si)", "Aluminiumguss (hoher Si-Gehalt)", "Aluminium de fonderie (Si élevé)", "Aluminio de fundición (alto Si)", "铸造铝合金（高硅）", "アルミ鋳物（高Si）", "주조 알루미늄 (고Si)"],
-        "brass" => ["Brass CW614N", "Ottone CW614N", "Messing CW614N", "Laiton CW614N", "Latón CW614N", "黄铜 CW614N", "黄銅 CW614N", "황동 CW614N"],
-        "bronze" => ["Tin bronze CuSn", "Bronzo CuSn", "Zinnbronze CuSn", "Bronze CuSn", "Bronce CuSn", "锡青铜 CuSn", "青銅 CuSn", "청동 CuSn"],
-        "copper" => ["Copper Cu-ETP", "Rame Cu-ETP", "Kupfer Cu-ETP", "Cuivre Cu-ETP", "Cobre Cu-ETP", "纯铜 Cu-ETP", "銅 Cu-ETP", "구리 Cu-ETP"],
-        "s235" => ["Mild steel S235 / C15", "Acciaio dolce S235 / C15", "Baustahl S235 / C15", "Acier doux S235 / C15", "Acero dulce S235 / C15", "低碳钢 S235 / C15", "軟鋼 S235 / C15", "연강 S235 / C15"],
-        "c45" => ["Carbon steel C45 (1045)", "Acciaio C45", "Vergütungsstahl C45", "Acier C45", "Acero C45", "中碳钢 C45", "炭素鋼 C45（S45C）", "탄소강 C45 (S45C)"],
-        "42crmo4" => ["42CrMo4 (4140) ~30 HRC", "42CrMo4 bonificato ~30 HRC", "42CrMo4 vergütet ~30 HRC", "42CrMo4 traité ~30 HRC", "42CrMo4 bonificado ~30 HRC", "42CrMo4 调质 ~30 HRC", "42CrMo4（SCM440）調質 ~30 HRC", "42CrMo4 (SCM440) 조질 ~30 HRC"],
-        "p20" => ["Mould steel 1.2311 (P20)", "Acciaio per stampi 1.2311", "Formenstahl 1.2311", "Acier pour moules 1.2311", "Acero para moldes 1.2311", "模具钢 1.2311 (P20)", "金型鋼 1.2311（P20）", "금형강 1.2311 (P20)"],
-        "ss304" => ["Stainless AISI 304", "Inox AISI 304", "Edelstahl 1.4301 (304)", "Inox AISI 304", "Inoxidable AISI 304", "不锈钢 304", "ステンレス SUS304", "스테인리스 304"],
-        "ss316" => ["Stainless AISI 316", "Inox AISI 316", "Edelstahl 1.4401 (316)", "Inox AISI 316", "Inoxidable AISI 316", "不锈钢 316", "ステンレス SUS316", "스테인리스 316"],
-        "ss174" => ["Stainless 17-4PH", "Inox 17-4PH", "Edelstahl 17-4PH (1.4542)", "Inox 17-4PH", "Inoxidable 17-4PH", "不锈钢 17-4PH", "ステンレス SUS630（17-4PH）", "스테인리스 17-4PH"],
-        "gg25" => ["Grey cast iron EN-GJL-250", "Ghisa grigia EN-GJL-250", "Grauguss EN-GJL-250", "Fonte grise EN-GJL-250", "Fundición gris EN-GJL-250", "灰铸铁 HT250", "ねずみ鋳鉄 FC250", "회주철 GC250"],
-        "ggg50" => ["Ductile iron EN-GJS-500", "Ghisa sferoidale EN-GJS-500", "Sphäroguss EN-GJS-500", "Fonte GS EN-GJS-500", "Fundición nodular EN-GJS-500", "球墨铸铁 QT500", "球状黒鉛鋳鉄 FCD500", "구상흑연주철 GCD500"],
-        "ti64" => ["Titanium Ti6Al4V (grade 5)", "Titanio Ti6Al4V (grado 5)", "Titan Ti6Al4V (Grade 5)", "Titane Ti6Al4V (grade 5)", "Titanio Ti6Al4V (grado 5)", "钛合金 TC4 (Ti6Al4V)", "チタン Ti6Al4V（64チタン）", "티타늄 Ti6Al4V (Grade 5)"],
-        "in718" => ["Inconel 718", "Inconel 718", "Inconel 718", "Inconel 718", "Inconel 718", "镍基合金 Inconel 718", "インコネル 718", "인코넬 718"],
-        "h50" => ["Hardened steel 48–55 HRC", "Acciaio temprato 48–55 HRC", "Gehärteter Stahl 48–55 HRC", "Acier trempé 48–55 HRC", "Acero templado 48–55 HRC", "淬硬钢 48–55 HRC", "焼入れ鋼 48–55 HRC", "경화강 48–55 HRC"],
-        "pom" => ["POM / Delrin", "POM / Delrin", "POM", "POM / Delrin", "POM / Delrin", "聚甲醛 POM", "POM（ジュラコン）", "POM (아세탈)"],
-        "pmma" => ["Acrylic PMMA", "Plexiglass PMMA", "Acrylglas PMMA", "PMMA (plexiglas)", "Metacrilato PMMA", "亚克力 PMMA", "アクリル PMMA", "아크릴 PMMA"],
-        "hdpe" => ["HDPE / PP", "HDPE / PP", "HDPE / PP", "PEHD / PP", "HDPE / PP", "HDPE / PP", "HDPE / PP", "HDPE / PP"],
-        "g10" => ["G10 / FR4 fibreglass", "Vetronite G10 / FR4", "GFK G10 / FR4", "Verre-époxy G10 / FR4", "Fibra de vidrio G10 / FR4", "环氧玻纤板 G10 / FR4", "ガラエポ G10 / FR4", "유리에폭시 G10 / FR4"],
-        "hardwood" => ["Hardwood (beech, oak)", "Legno duro (faggio, rovere)", "Hartholz (Buche, Eiche)", "Bois dur (hêtre, chêne)", "Madera dura (haya, roble)", "硬木（山毛榉、橡木）", "広葉樹（ブナ、オーク）", "활엽수 (너도밤나무, 참나무)"],
-        "softwood" => ["Softwood (fir, pine)", "Legno tenero (abete, pino)", "Weichholz (Tanne, Kiefer)", "Bois tendre (sapin, pin)", "Madera blanda (abeto, pino)", "软木（冷杉、松木）", "針葉樹（モミ、マツ）", "침엽수 (전나무, 소나무)"],
-        "mdf" => ["MDF / plywood", "MDF / multistrato", "MDF / Sperrholz", "MDF / contreplaqué", "MDF / contrachapado", "中密度板 / 胶合板", "MDF / 合板", "MDF / 합판"],
+        "al6061" => [
+            "Aluminium 6061 / 6082",
+            "Alluminio 6061 / 6082",
+            "Aluminium 6061 / 6082",
+            "Aluminium 6061 / 6082",
+            "Aluminio 6061 / 6082",
+            "铝合金 6061 / 6082",
+            "アルミ 6061 / 6082",
+            "알루미늄 6061 / 6082",
+        ],
+        "al7075" => [
+            "Aluminium 7075",
+            "Alluminio 7075 (Ergal)",
+            "Aluminium 7075 (Ergal)",
+            "Aluminium 7075",
+            "Aluminio 7075",
+            "铝合金 7075",
+            "アルミ 7075（超々ジュラルミン）",
+            "알루미늄 7075",
+        ],
+        "alcast" => [
+            "Cast aluminium (high Si)",
+            "Alluminio da fusione (alto Si)",
+            "Aluminiumguss (hoher Si-Gehalt)",
+            "Aluminium de fonderie (Si élevé)",
+            "Aluminio de fundición (alto Si)",
+            "铸造铝合金（高硅）",
+            "アルミ鋳物（高Si）",
+            "주조 알루미늄 (고Si)",
+        ],
+        "brass" => [
+            "Brass CW614N",
+            "Ottone CW614N",
+            "Messing CW614N",
+            "Laiton CW614N",
+            "Latón CW614N",
+            "黄铜 CW614N",
+            "黄銅 CW614N",
+            "황동 CW614N",
+        ],
+        "bronze" => [
+            "Tin bronze CuSn",
+            "Bronzo CuSn",
+            "Zinnbronze CuSn",
+            "Bronze CuSn",
+            "Bronce CuSn",
+            "锡青铜 CuSn",
+            "青銅 CuSn",
+            "청동 CuSn",
+        ],
+        "copper" => [
+            "Copper Cu-ETP",
+            "Rame Cu-ETP",
+            "Kupfer Cu-ETP",
+            "Cuivre Cu-ETP",
+            "Cobre Cu-ETP",
+            "纯铜 Cu-ETP",
+            "銅 Cu-ETP",
+            "구리 Cu-ETP",
+        ],
+        "s235" => [
+            "Mild steel S235 / C15",
+            "Acciaio dolce S235 / C15",
+            "Baustahl S235 / C15",
+            "Acier doux S235 / C15",
+            "Acero dulce S235 / C15",
+            "低碳钢 S235 / C15",
+            "軟鋼 S235 / C15",
+            "연강 S235 / C15",
+        ],
+        "c45" => [
+            "Carbon steel C45 (1045)",
+            "Acciaio C45",
+            "Vergütungsstahl C45",
+            "Acier C45",
+            "Acero C45",
+            "中碳钢 C45",
+            "炭素鋼 C45（S45C）",
+            "탄소강 C45 (S45C)",
+        ],
+        "42crmo4" => [
+            "42CrMo4 (4140) ~30 HRC",
+            "42CrMo4 bonificato ~30 HRC",
+            "42CrMo4 vergütet ~30 HRC",
+            "42CrMo4 traité ~30 HRC",
+            "42CrMo4 bonificado ~30 HRC",
+            "42CrMo4 调质 ~30 HRC",
+            "42CrMo4（SCM440）調質 ~30 HRC",
+            "42CrMo4 (SCM440) 조질 ~30 HRC",
+        ],
+        "p20" => [
+            "Mould steel 1.2311 (P20)",
+            "Acciaio per stampi 1.2311",
+            "Formenstahl 1.2311",
+            "Acier pour moules 1.2311",
+            "Acero para moldes 1.2311",
+            "模具钢 1.2311 (P20)",
+            "金型鋼 1.2311（P20）",
+            "금형강 1.2311 (P20)",
+        ],
+        "ss304" => [
+            "Stainless AISI 304",
+            "Inox AISI 304",
+            "Edelstahl 1.4301 (304)",
+            "Inox AISI 304",
+            "Inoxidable AISI 304",
+            "不锈钢 304",
+            "ステンレス SUS304",
+            "스테인리스 304",
+        ],
+        "ss316" => [
+            "Stainless AISI 316",
+            "Inox AISI 316",
+            "Edelstahl 1.4401 (316)",
+            "Inox AISI 316",
+            "Inoxidable AISI 316",
+            "不锈钢 316",
+            "ステンレス SUS316",
+            "스테인리스 316",
+        ],
+        "ss174" => [
+            "Stainless 17-4PH",
+            "Inox 17-4PH",
+            "Edelstahl 17-4PH (1.4542)",
+            "Inox 17-4PH",
+            "Inoxidable 17-4PH",
+            "不锈钢 17-4PH",
+            "ステンレス SUS630（17-4PH）",
+            "스테인리스 17-4PH",
+        ],
+        "gg25" => [
+            "Grey cast iron EN-GJL-250",
+            "Ghisa grigia EN-GJL-250",
+            "Grauguss EN-GJL-250",
+            "Fonte grise EN-GJL-250",
+            "Fundición gris EN-GJL-250",
+            "灰铸铁 HT250",
+            "ねずみ鋳鉄 FC250",
+            "회주철 GC250",
+        ],
+        "ggg50" => [
+            "Ductile iron EN-GJS-500",
+            "Ghisa sferoidale EN-GJS-500",
+            "Sphäroguss EN-GJS-500",
+            "Fonte GS EN-GJS-500",
+            "Fundición nodular EN-GJS-500",
+            "球墨铸铁 QT500",
+            "球状黒鉛鋳鉄 FCD500",
+            "구상흑연주철 GCD500",
+        ],
+        "ti64" => [
+            "Titanium Ti6Al4V (grade 5)",
+            "Titanio Ti6Al4V (grado 5)",
+            "Titan Ti6Al4V (Grade 5)",
+            "Titane Ti6Al4V (grade 5)",
+            "Titanio Ti6Al4V (grado 5)",
+            "钛合金 TC4 (Ti6Al4V)",
+            "チタン Ti6Al4V（64チタン）",
+            "티타늄 Ti6Al4V (Grade 5)",
+        ],
+        "in718" => [
+            "Inconel 718",
+            "Inconel 718",
+            "Inconel 718",
+            "Inconel 718",
+            "Inconel 718",
+            "镍基合金 Inconel 718",
+            "インコネル 718",
+            "인코넬 718",
+        ],
+        "h50" => [
+            "Hardened steel 48–55 HRC",
+            "Acciaio temprato 48–55 HRC",
+            "Gehärteter Stahl 48–55 HRC",
+            "Acier trempé 48–55 HRC",
+            "Acero templado 48–55 HRC",
+            "淬硬钢 48–55 HRC",
+            "焼入れ鋼 48–55 HRC",
+            "경화강 48–55 HRC",
+        ],
+        "pom" => [
+            "POM / Delrin",
+            "POM / Delrin",
+            "POM",
+            "POM / Delrin",
+            "POM / Delrin",
+            "聚甲醛 POM",
+            "POM（ジュラコン）",
+            "POM (아세탈)",
+        ],
+        "pmma" => [
+            "Acrylic PMMA",
+            "Plexiglass PMMA",
+            "Acrylglas PMMA",
+            "PMMA (plexiglas)",
+            "Metacrilato PMMA",
+            "亚克力 PMMA",
+            "アクリル PMMA",
+            "아크릴 PMMA",
+        ],
+        "hdpe" => [
+            "HDPE / PP",
+            "HDPE / PP",
+            "HDPE / PP",
+            "PEHD / PP",
+            "HDPE / PP",
+            "HDPE / PP",
+            "HDPE / PP",
+            "HDPE / PP",
+        ],
+        "g10" => [
+            "G10 / FR4 fibreglass",
+            "Vetronite G10 / FR4",
+            "GFK G10 / FR4",
+            "Verre-époxy G10 / FR4",
+            "Fibra de vidrio G10 / FR4",
+            "环氧玻纤板 G10 / FR4",
+            "ガラエポ G10 / FR4",
+            "유리에폭시 G10 / FR4",
+        ],
+        "hardwood" => [
+            "Hardwood (beech, oak)",
+            "Legno duro (faggio, rovere)",
+            "Hartholz (Buche, Eiche)",
+            "Bois dur (hêtre, chêne)",
+            "Madera dura (haya, roble)",
+            "硬木（山毛榉、橡木）",
+            "広葉樹（ブナ、オーク）",
+            "활엽수 (너도밤나무, 참나무)",
+        ],
+        "softwood" => [
+            "Softwood (fir, pine)",
+            "Legno tenero (abete, pino)",
+            "Weichholz (Tanne, Kiefer)",
+            "Bois tendre (sapin, pin)",
+            "Madera blanda (abeto, pino)",
+            "软木（冷杉、松木）",
+            "針葉樹（モミ、マツ）",
+            "침엽수 (전나무, 소나무)",
+        ],
+        "mdf" => [
+            "MDF / plywood",
+            "MDF / multistrato",
+            "MDF / Sperrholz",
+            "MDF / contreplaqué",
+            "MDF / contrachapado",
+            "中密度板 / 胶合板",
+            "MDF / 合板",
+            "MDF / 합판",
+        ],
         _ => return "?",
     };
     names[lang.idx()]
@@ -471,14 +709,25 @@ impl Lang {
             Step::Drilling => self.t(K::StepDrilling).into(),
             Step::Coating(c) => self.f(K::StepCoating, &[self.coating(c)]),
             Step::FullSlot => self.t(K::StepFullSlot).into(),
-            Step::Engagement { pct, cooler } => self.f(if cooler { K::StepEngCool } else { K::StepEng }, &[&n(pct, 0)]),
+            Step::Engagement { pct, cooler } => self.f(
+                if cooler { K::StepEngCool } else { K::StepEng },
+                &[&n(pct, 0)],
+            ),
             Step::LifeTweak => self.t(K::StepLife).into(),
             Step::VcTarget => self.t(K::StepVcTarget).into(),
             Step::EffectiveDiameter => self.t(K::StepEffD).into(),
             Step::FzBase { cf } => self.f(K::StepFzBase, &[&n(cf, 4)]),
             Step::FzBaseInsert => self.t(K::StepFzInsert).into(),
-            Step::FzFactors { tool, rigidity, tweak, slot } => {
-                let mut s = self.f(K::StepFzFactors, &[&n(tool, 2), &n(rigidity, 2), &n(tweak, 2)]);
+            Step::FzFactors {
+                tool,
+                rigidity,
+                tweak,
+                slot,
+            } => {
+                let mut s = self.f(
+                    K::StepFzFactors,
+                    &[&n(tool, 2), &n(rigidity, 2), &n(tweak, 2)],
+                );
                 if slot {
                     s.push_str(&self.f(K::StepSlotSuffix, &[&n(0.85, 2)]));
                 }
@@ -511,27 +760,63 @@ impl Lang {
         let n = |v: f64, d: usize| self.num(v, d);
         let tx = |t: K, x: K| (self.t(t).to_string(), self.t(x).to_string());
         match w.msg {
-            Msg::HssNotSuitable => (self.t(K::WHssT).into(), self.f(K::WHssX, &[material_name(self, material_id)])),
+            Msg::HssNotSuitable => (
+                self.t(K::WHssT).into(),
+                self.f(K::WHssX, &[material_name(self, material_id)]),
+            ),
             Msg::AlTiNOnAluminium => tx(K::WAltinT, K::WAltinX),
             Msg::DiamondOnFerrous => tx(K::WDiaT, K::WDiaX),
-            Msg::PowerShort { need_kw, avail_kw, rpm } => (self.t(K::WPowT).into(), self.f(K::WPowX, &[&n(need_kw, 2), &n(avail_kw, 2), &n(rpm, 0)])),
-            Msg::DeepHole { ratio, peck } => (self.f(K::WDeepHoleT, &[&n(ratio, 1)]), self.f(K::WDeepHoleX, &[&n(peck, 1)])),
+            Msg::PowerShort {
+                need_kw,
+                avail_kw,
+                rpm,
+            } => (
+                self.t(K::WPowT).into(),
+                self.f(K::WPowX, &[&n(need_kw, 2), &n(avail_kw, 2), &n(rpm, 0)]),
+            ),
+            Msg::DeepHole { ratio, peck } => (
+                self.f(K::WDeepHoleT, &[&n(ratio, 1)]),
+                self.f(K::WDeepHoleX, &[&n(peck, 1)]),
+            ),
             Msg::Over8D => tx(K::WOver8T, K::WOver8X),
             Msg::VBitTooDeep { ap } => (self.t(K::WVbitT).into(), self.f(K::WVbitX, &[&n(ap, 2)])),
             Msg::ThinChip { chip, metal } => (
                 self.f(K::WThinT, &[&n(chip, 4)]),
-                self.t(if metal { K::WThinMetalX } else { K::WThinPlasticX }).into(),
+                self.t(if metal {
+                    K::WThinMetalX
+                } else {
+                    K::WThinPlasticX
+                })
+                .into(),
             ),
             Msg::DeflectionHalvesFeed => tx(K::WDeflHalfT, K::WDeflHalfX),
             Msg::PowerHalvesFeed => tx(K::WPowHalfT, K::WPowHalfX),
-            Msg::Deflection { um, limit_um } => (self.f(K::WDeflT, &[&n(um, 0)]), self.f(K::WDeflX, &[&n(limit_um, 0)])),
-            Msg::ApOverFlute { flute } => (self.t(K::WApFluteT).into(), self.f(K::WApFluteX, &[&n(flute, 1)])),
-            Msg::LongStickout { ratio } => (self.f(K::WStickT, &[&n(ratio, 1)]), self.t(K::WStickX).into()),
+            Msg::Deflection { um, limit_um } => (
+                self.f(K::WDeflT, &[&n(um, 0)]),
+                self.f(K::WDeflX, &[&n(limit_um, 0)]),
+            ),
+            Msg::ApOverFlute { flute } => (
+                self.t(K::WApFluteT).into(),
+                self.f(K::WApFluteX, &[&n(flute, 1)]),
+            ),
+            Msg::LongStickout { ratio } => (
+                self.f(K::WStickT, &[&n(ratio, 1)]),
+                self.t(K::WStickX).into(),
+            ),
             Msg::StickoutShorterThanFlute => tx(K::WStickShortT, K::WStickShortX),
-            Msg::TooManyFlutesInAlSlot { z } => (self.f(K::WFlutesT, &[&z.to_string()]), self.t(K::WFlutesX).into()),
+            Msg::TooManyFlutesInAlSlot { z } => (
+                self.f(K::WFlutesT, &[&z.to_string()]),
+                self.t(K::WFlutesX).into(),
+            ),
             Msg::DeepSlot => tx(K::WDeepSlotT, K::WDeepSlotX),
-            Msg::RpmCapped { vc, pct } => (self.t(K::WCapT).into(), self.f(K::WCapX, &[&n(vc, 0), &n(pct, 0)])),
-            Msg::RpmMinTooHigh { vc, target } => (self.t(K::WMinT).into(), self.f(K::WMinX, &[&n(vc, 0), &n(target, 0)])),
+            Msg::RpmCapped { vc, pct } => (
+                self.t(K::WCapT).into(),
+                self.f(K::WCapX, &[&n(vc, 0), &n(pct, 0)]),
+            ),
+            Msg::RpmMinTooHigh { vc, target } => (
+                self.t(K::WMinT).into(),
+                self.f(K::WMinX, &[&n(vc, 0), &n(target, 0)]),
+            ),
         }
     }
 }

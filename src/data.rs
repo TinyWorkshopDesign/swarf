@@ -19,7 +19,16 @@ pub enum Iso {
 }
 
 impl Iso {
-    pub const ALL: [Iso; 8] = [Iso::N, Iso::P, Iso::M, Iso::K, Iso::S, Iso::H, Iso::O, Iso::W];
+    pub const ALL: [Iso; 8] = [
+        Iso::N,
+        Iso::P,
+        Iso::M,
+        Iso::K,
+        Iso::S,
+        Iso::H,
+        Iso::O,
+        Iso::W,
+    ];
 
     pub fn letter(self) -> &'static str {
         match self {
@@ -98,8 +107,24 @@ pub struct Material {
     pub mc: f64,
 }
 
-const fn mat(id: &'static str, group: Iso, vc_carbide: f64, vc_hss: f64, cf: f64, kc: f64, mc: f64) -> Material {
-    Material { id, group, vc_carbide, vc_hss, cf, kc, mc }
+const fn mat(
+    id: &'static str,
+    group: Iso,
+    vc_carbide: f64,
+    vc_hss: f64,
+    cf: f64,
+    kc: f64,
+    mc: f64,
+) -> Material {
+    Material {
+        id,
+        group,
+        vc_carbide,
+        vc_hss,
+        cf,
+        kc,
+        mc,
+    }
 }
 
 pub const MATERIALS: &[Material] = &[
@@ -131,7 +156,10 @@ pub const MATERIALS: &[Material] = &[
 ];
 
 pub fn material(id: &str) -> &'static Material {
-    MATERIALS.iter().find(|m| m.id == id).unwrap_or(&MATERIALS[0])
+    MATERIALS
+        .iter()
+        .find(|m| m.id == id)
+        .unwrap_or(&MATERIALS[0])
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -145,7 +173,14 @@ pub enum Coating {
 }
 
 impl Coating {
-    pub const ALL: [Coating; 6] = [Coating::None, Coating::TiN, Coating::TiCN, Coating::AlTiN, Coating::ZrN, Coating::Diamond];
+    pub const ALL: [Coating; 6] = [
+        Coating::None,
+        Coating::TiN,
+        Coating::TiCN,
+        Coating::AlTiN,
+        Coating::ZrN,
+        Coating::Diamond,
+    ];
 
     /// Cutting speed multiplier per material group.
     pub fn vc_factor(self, g: Iso) -> f64 {
@@ -178,7 +213,11 @@ pub enum ToolMaterial {
 }
 
 impl ToolMaterial {
-    pub const ALL: [ToolMaterial; 3] = [ToolMaterial::Carbide, ToolMaterial::HssCo, ToolMaterial::Hss];
+    pub const ALL: [ToolMaterial; 3] = [
+        ToolMaterial::Carbide,
+        ToolMaterial::HssCo,
+        ToolMaterial::Hss,
+    ];
 
     /// Young's modulus (N/mm²) used for the deflection estimate.
     pub fn young(self) -> f64 {
@@ -200,7 +239,14 @@ pub enum ToolKind {
 }
 
 impl ToolKind {
-    pub const ALL: [ToolKind; 6] = [ToolKind::Flat, ToolKind::Ball, ToolKind::Bull, ToolKind::VBit, ToolKind::Face, ToolKind::Drill];
+    pub const ALL: [ToolKind; 6] = [
+        ToolKind::Flat,
+        ToolKind::Ball,
+        ToolKind::Bull,
+        ToolKind::VBit,
+        ToolKind::Face,
+        ToolKind::Drill,
+    ];
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -232,7 +278,12 @@ pub enum MachinePreset {
 }
 
 impl MachinePreset {
-    pub const ALL: [MachinePreset; 4] = [MachinePreset::Router, MachinePreset::Bench, MachinePreset::Vmc, MachinePreset::Custom];
+    pub const ALL: [MachinePreset; 4] = [
+        MachinePreset::Router,
+        MachinePreset::Bench,
+        MachinePreset::Vmc,
+        MachinePreset::Custom,
+    ];
 }
 
 /// Cut strategies used by the preset buttons and the comparison chart.
@@ -245,5 +296,10 @@ pub enum Strategy {
 }
 
 impl Strategy {
-    pub const ALL: [Strategy; 4] = [Strategy::Slot, Strategy::Rough, Strategy::Hsm, Strategy::Finish];
+    pub const ALL: [Strategy; 4] = [
+        Strategy::Slot,
+        Strategy::Rough,
+        Strategy::Hsm,
+        Strategy::Finish,
+    ];
 }

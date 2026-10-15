@@ -1,15 +1,19 @@
 #!/bin/sh
 # Builds target/release/Swarf.app with the icon, ready to drag into /Applications.
+# BIN=path/to/swarf uses an already built binary (CI passes a universal one).
 set -e
 cd "$(dirname "$0")/.."
 BUNDLE_ID="${BUNDLE_ID:-io.github.swarf}"
 VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
 
-cargo build --release
+if [ -z "$BIN" ]; then
+  cargo build --release
+  BIN=target/release/swarf
+fi
 APP=target/release/Swarf.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp target/release/swarf "$APP/Contents/MacOS/swarf"
+cp "$BIN" "$APP/Contents/MacOS/swarf"
 cp assets/icon.icns "$APP/Contents/Resources/Swarf.icns"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
