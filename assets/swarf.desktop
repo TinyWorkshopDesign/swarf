@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Swarf
+Comment=Speeds and feeds calculator for CNC milling and drilling
+Exec=swarf
+Icon=swarf
+Terminal=false
+Categories=Engineering;Utility;
+StartupWMClass=swarf

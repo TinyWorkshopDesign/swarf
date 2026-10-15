@@ -1,0 +1,694 @@
+<title>Truciolo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: officina — colonna di parametri a sinistra, "quadro DRO" a cristalli liquidi fisso a destra */
+:root{
+  --bg:#E6EAED; --panel:#F6F8F9; --ink:#15202A; --muted:#566573; --line:#C5CDD4;
+  --accent:#0A6A93; --accent-ink:#FFFFFF; --signal:#E3A21A;
+  --ok:#2C7A4B; --warn:#A86A12; --crit:#B3362B;
+  --lcd-bg:#C4CFB9; --lcd-ink:#1B2A1E; --lcd-dim:#6D7E66; --lcd-edge:#8E9C86;
+  --track:#D6DDE2;
+  --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12181D; --panel:#1A2229; --ink:#E3E9EE; --muted:#93A1AD; --line:#2E3A44;
+  --accent:#4BB0DB; --accent-ink:#0B1A22; --signal:#F0B43C;
+  --ok:#5CC487; --warn:#E5A84A; --crit:#F0766A;
+  --lcd-bg:#1C281F; --lcd-ink:#B9E6A6; --lcd-dim:#5E7B57; --lcd-edge:#33473A;
+  --track:#26313A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12181D; --panel:#1A2229; --ink:#E3E9EE; --muted:#93A1AD; --line:#2E3A44;
+  --accent:#4BB0DB; --accent-ink:#0B1A22; --signal:#F0B43C;
+  --ok:#5CC487; --warn:#E5A84A; --crit:#F0766A;
+  --lcd-bg:#1C281F; --lcd-ink:#B9E6A6; --lcd-dim:#5E7B57; --lcd-edge:#33473A;
+  --track:#26313A; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45;padding-inline:16px;padding-block:0 40px}
+.wrap{max-width:1240px;margin:0 auto}
+header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-block:22px 16px;border-bottom:2px solid var(--ink);margin-bottom:20px}
+.brand{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.brand h1{font-family:var(--f-display);font-weight:700;font-size:44px;line-height:.9;letter-spacing:.01em;margin:0;text-transform:uppercase}
+.brand h1 span{display:inline-block;width:.55em;height:.18em;background:var(--signal);margin-left:.08em;vertical-align:baseline;transform:skewX(-20deg)}
+.brand p{margin:0;color:var(--muted);max-width:52ch}
+.top-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+.main{display:grid;grid-template-columns:minmax(0,1fr);gap:20px}
+@media (min-width:980px){.main{grid-template-columns:minmax(0,1fr) 410px;align-items:start}
+  .results{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px)}}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px 16px 18px}
+.inputs{display:grid;gap:14px}
+.card h2{font-family:var(--f-display);font-weight:600;font-size:20px;letter-spacing:.04em;text-transform:uppercase;margin:0 0 12px;display:flex;align-items:center;gap:10px}
+.card h2 .tag{font-family:var(--f-mono);font-size:11px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:1px 6px}
+.fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px 14px}
+.fields .wide{grid-column:1/-1}
+label.f{display:flex;flex-direction:column;gap:4px;min-width:0}
+label.f > span{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+label.f > span em{font-style:normal;font-weight:400;text-transform:none;letter-spacing:0;font-family:var(--f-mono)}
+input[type=number],select,input[type=text]{width:100%;font:inherit;font-family:var(--f-mono);font-size:14px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:7px 9px;min-width:0}
+select{font-family:var(--f-body)}
+input:focus-visible,select:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.iso{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:3px;font-family:var(--f-display);font-weight:700;font-size:15px;color:#fff}
+.iso.N{background:#2E8B57}.iso.P{background:#1F5FA8}.iso.M{background:#D9A400;color:#1b1b1b}.iso.K{background:#C0392B}.iso.S{background:#C76A10}.iso.H{background:#6B7682}.iso.O{background:#7A4FA0}.iso.W{background:#8A6A3E}
+.matline{display:flex;align-items:center;gap:10px;margin-top:10px;color:var(--muted);font-size:13px;flex-wrap:wrap}
+
+.presets{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+button{font:inherit;cursor:pointer}
+.btn{font-family:var(--f-display);font-weight:600;font-size:15px;letter-spacing:.05em;text-transform:uppercase;padding:6px 12px;border-radius:4px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{color:var(--accent-ink);filter:brightness(1.08)}
+.btn.small{font-size:13px;padding:3px 9px}
+.checks{display:grid;gap:8px;margin-top:14px}
+.check{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.check input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
+.check input[type=number]{width:90px}
+
+.sliders{display:grid;gap:16px}
+.slider .ends{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.slider input[type=range]{width:100%;accent-color:var(--accent)}
+.slider .val{font-family:var(--f-mono);font-size:12px;color:var(--ink);text-align:center}
+
+/* DRO */
+.results{display:grid;gap:14px}
+.dro{background:var(--lcd-bg);color:var(--lcd-ink);border-radius:6px;padding:14px 16px 12px;border:3px solid var(--ink);box-shadow:inset 0 0 0 1px var(--lcd-edge),inset 0 6px 18px rgba(0,0,0,.12)}
+.dro .row{display:grid;grid-template-columns:28px 1fr auto;align-items:baseline;gap:8px;padding-block:4px}
+.dro .row + .row{border-top:1px dashed var(--lcd-edge)}
+.dro .ax{font-family:var(--f-display);font-weight:700;font-size:28px}
+.dro .v{font-family:var(--f-mono);font-weight:600;font-size:46px;line-height:1.05;text-align:right;font-variant-numeric:tabular-nums;letter-spacing:-.02em;overflow-wrap:anywhere}
+.dro .u{font-family:var(--f-mono);font-size:12px;color:var(--lcd-dim);width:52px}
+.dro .foot{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-family:var(--f-mono);font-size:12px;color:var(--lcd-dim);margin-top:6px}
+.limiter{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-family:var(--f-mono);font-size:11px;padding:2px 7px;border-radius:3px;border:1px solid currentColor}
+.chip.ok{color:var(--ok)}.chip.warn{color:var(--warn)}.chip.crit{color:var(--crit)}.chip.info{color:var(--accent)}
+
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line);border-radius:6px;background:var(--panel);overflow:hidden}
+.stat{padding:10px 12px;border-bottom:1px solid var(--line);min-width:0}
+.stat:nth-child(odd){border-right:1px solid var(--line)}
+.stat .k{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.stat .n{font-family:var(--f-mono);font-size:18px;font-weight:500;font-variant-numeric:tabular-nums}
+.stat .n small{font-size:11px;color:var(--muted);font-weight:400;margin-left:3px}
+.stat .s{font-size:12px;color:var(--muted)}
+.stat.full{grid-column:1/-1;border-right:none}
+.stat:last-child,.stat:nth-last-child(2):nth-child(odd){border-bottom:none}
+
+.gauge{margin-top:6px;height:8px;background:var(--track);border-radius:2px;position:relative;overflow:hidden}
+.gauge i{position:absolute;inset:0 auto 0 0;background:var(--ok);border-radius:2px}
+.gauge i.warn{background:var(--warn)}.gauge i.crit{background:var(--crit)}
+
+.alerts{display:grid;gap:8px}
+.alert{border-left:4px solid var(--warn);background:var(--panel);border-radius:0 4px 4px 0;padding:8px 10px;font-size:13px;border-top:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.alert.crit{border-left-color:var(--crit)}.alert.info{border-left-color:var(--accent)}.alert.ok{border-left-color:var(--ok)}
+.alert b{font-weight:600}
+
+.gcode{display:flex;gap:8px;align-items:stretch}
+.gcode pre{flex:1;margin:0;font-family:var(--f-mono);font-size:13px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:8px 10px;overflow-x:auto;min-width:0;white-space:pre}
+
+details.why{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 12px}
+details.why summary{cursor:pointer;font-family:var(--f-display);font-weight:600;font-size:16px;letter-spacing:.04em;text-transform:uppercase}
+.why table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}
+.why td{padding:3px 0;border-bottom:1px dotted var(--line);vertical-align:top}
+.why td:last-child{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap;padding-left:10px}
+.why tr.sum td{font-weight:600;border-bottom:1px solid var(--ink)}
+
+.lib{display:grid;gap:10px}
+.lib .save{display:flex;gap:8px}
+.lib .save input{flex:1}
+.lib ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.lib li{display:flex;align-items:center;gap:8px;justify-content:space-between;border:1px solid var(--line);border-radius:4px;padding:6px 8px;background:var(--bg)}
+.lib li .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lib li .nm small{display:block;color:var(--muted);font-family:var(--f-mono);font-size:11px}
+.lib li .act{display:flex;gap:6px;flex-shrink:0}
+.empty{color:var(--muted);font-size:13px}
+
+.note{color:var(--muted);font-size:12px;max-width:80ch;margin-top:24px}
+
+.minidro{display:none}
+@media (max-width:979px){
+  body{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+  .minidro{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:5;gap:18px;justify-content:center;align-items:baseline;background:var(--lcd-bg);color:var(--lcd-ink);border-top:3px solid var(--ink);padding:8px 16px calc(8px + env(safe-area-inset-bottom,0px));font-family:var(--f-mono);font-weight:600;font-size:22px;font-variant-numeric:tabular-nums}
+  .minidro b{font-family:var(--f-display);font-size:20px;margin-right:4px}
+  .minidro small{font-size:11px;color:var(--lcd-dim);font-weight:400;margin-left:3px}
+}
+@media (max-width:420px){.dro .v{font-size:36px}.brand h1{font-size:36px}}
+@media (prefers-reduced-motion:no-preference){.gauge i{transition:width .25s ease}}
+</style>
+
+<div class="wrap">
+<header class="top">
+  <div class="brand">
+    <h1>Truciolo<span></span></h1>
+    <p>Velocità di taglio e avanzamenti per fresatura e foratura CNC: giri, feed, spessore truciolo, potenza e flessione dell'utensile.</p>
+  </div>
+  <div class="top-actions">
+    <button class="btn small" id="btn-reset" type="button">Esempio iniziale</button>
+  </div>
+</header>
+
+<div class="main">
+<div class="inputs">
+
+  <section class="card">
+    <h2>Macchina</h2>
+    <div class="fields">
+      <label class="f wide"><span>Profilo</span>
+        <select id="m-preset">
+          <option value="router">Router CNC hobby, elettromandrino 2,2 kW</option>
+          <option value="bench">Fresatrice da banco CNC, 1,1 kW</option>
+          <option value="vmc">Centro di lavoro verticale ISO40, 15 kW</option>
+          <option value="custom">Personalizzata</option>
+        </select></label>
+      <label class="f"><span>Giri max <em>rpm</em></span><input type="number" id="m-rpmmax" min="100" step="100"></label>
+      <label class="f"><span>Giri min <em>rpm</em></span><input type="number" id="m-rpmmin" min="0" step="100"></label>
+      <label class="f"><span>Potenza mandrino <em>kW</em></span><input type="number" id="m-kw" min="0.05" step="0.1"></label>
+      <label class="f"><span>Potenza piena da <em>rpm</em></span><input type="number" id="m-rpmbase" min="1" step="100" title="Sotto questi giri la potenza cala in proporzione (coppia costante)"></label>
+      <label class="f"><span>Avanz. max lavoro <em>mm/min</em></span><input type="number" id="m-fmax" min="10" step="100"></label>
+      <label class="f"><span>Rigidità</span>
+        <select id="m-rigid">
+          <option value="0.6">Bassa (router, portale)</option>
+          <option value="0.85">Media (banco, colonna)</option>
+          <option value="1">Alta (VMC in ghisa)</option>
+        </select></label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Materiale</h2>
+    <div class="fields">
+      <label class="f wide"><span>Materiale in lavorazione</span><select id="mat"></select></label>
+    </div>
+    <div class="matline" id="matline"></div>
+  </section>
+
+  <section class="card">
+    <h2>Utensile</h2>
+    <div class="fields">
+      <label class="f"><span>Tipo</span>
+        <select id="t-type">
+          <option value="flat">Fresa cilindrica piana</option>
+          <option value="ball">Fresa sferica</option>
+          <option value="bull">Fresa torica</option>
+          <option value="vbit">Fresa a V / smusso</option>
+          <option value="face">Spianatore a inserti</option>
+          <option value="drill">Punta elicoidale</option>
+        </select></label>
+      <label class="f"><span>Materiale utensile</span>
+        <select id="t-mat">
+          <option value="carb">Metallo duro (MD)</option>
+          <option value="hssco">HSS-Co (cobalto)</option>
+          <option value="hss">HSS</option>
+        </select></label>
+      <label class="f"><span>Rivestimento</span><select id="t-coat"></select></label>
+      <label class="f"><span>Diametro Ø <em>mm</em></span><input type="number" id="t-d" min="0.1" step="0.5"></label>
+      <label class="f" data-for="mill"><span>Taglienti Z</span><input type="number" id="t-z" min="1" max="40" step="1"></label>
+      <label class="f" data-for="bull"><span>Raggio inserto r <em>mm</em></span><input type="number" id="t-r" min="0" step="0.1"></label>
+      <label class="f" data-for="vbit"><span>Angolo V incluso <em>°</em></span><input type="number" id="t-angle" min="10" max="170" step="1"></label>
+      <label class="f" data-for="vbit"><span>Ø punta <em>mm</em></span><input type="number" id="t-tip" min="0" step="0.1"></label>
+      <label class="f" data-for="face"><span>Angolo registro κ <em>°</em></span><input type="number" id="t-kappa" min="10" max="90" step="1"></label>
+      <label class="f" data-for="notface"><span>Lunghezza tagliente <em>mm</em></span><input type="number" id="t-flute" min="0.1" step="1"></label>
+      <label class="f" data-for="notface"><span>Sporgenza dal mandrino <em>mm</em></span><input type="number" id="t-stick" min="0.5" step="1"></label>
+      <label class="f" data-for="notface"><span>Ø gambo <em>mm</em></span><input type="number" id="t-shank" min="0.5" step="0.5"></label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Passata <span class="tag" id="cut-tag"></span></h2>
+    <div class="presets" id="presets" data-for="notdrill">
+      <button class="btn small" type="button" data-preset="slot">Cava piena</button>
+      <button class="btn small" type="button" data-preset="rough">Sgrossatura</button>
+      <button class="btn small" type="button" data-preset="hsm">Trocoidale / adattiva</button>
+      <button class="btn small" type="button" data-preset="finish">Finitura</button>
+    </div>
+    <div class="fields">
+      <label class="f"><span id="lbl-ap">Profondità assiale a<sub>p</sub> <em>mm</em></span><input type="number" id="c-ap" min="0.01" step="0.1"></label>
+      <label class="f" data-for="ae"><span>Larghezza radiale a<sub>e</sub> <em>mm</em></span><input type="number" id="c-ae" min="0.01" step="0.1"></label>
+    </div>
+    <div class="checks">
+      <label class="check" data-for="ae"><input type="checkbox" id="c-thin"> Compensa assottigliamento truciolo (passate strette, sferiche, angolo di registro)</label>
+      <label class="check" data-for="notdrill"><input type="checkbox" id="c-defl"> Limita la flessione dell'utensile a <input type="number" id="c-deflim" min="0.001" step="0.005"> mm</label>
+      <label class="check"><input type="checkbox" id="c-pow"> Riduci l'avanzamento se la potenza non basta</label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Regolazioni</h2>
+    <div class="sliders">
+      <div class="slider">
+        <div class="ends"><span>Durata utensile</span><span>Produttività</span></div>
+        <input type="range" id="s-life" min="-100" max="100" step="5" aria-label="Durata utensile o produttività">
+        <div class="val" id="s-life-v"></div>
+      </div>
+      <div class="slider">
+        <div class="ends"><span>Finitura</span><span>Asportazione</span></div>
+        <input type="range" id="s-finish" min="-100" max="100" step="5" aria-label="Finitura o asportazione">
+        <div class="val" id="s-finish-v"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card lib">
+    <h2>Le mie impostazioni</h2>
+    <div class="save">
+      <input type="text" id="lib-name" placeholder="Nome, es. Fresa 6 Z3 alluminio" maxlength="60">
+      <button class="btn primary small" id="lib-save" type="button">Salva</button>
+    </div>
+    <ul id="lib-list"></ul>
+    <div class="empty" id="lib-empty">Nessuna impostazione salvata. Salva la combinazione corrente di macchina, materiale e utensile per richiamarla più tardi. Restano solo in questo browser.</div>
+  </section>
+</div>
+
+<aside class="results" aria-live="polite">
+  <div class="dro">
+    <div class="row"><span class="ax">S</span><span class="v" id="o-n">—</span><span class="u">giri/min</span></div>
+    <div class="row"><span class="ax">F</span><span class="v" id="o-f">—</span><span class="u">mm/min</span></div>
+    <div class="foot"><span id="o-sub">—</span><span class="limiter" id="o-lim"></span></div>
+  </div>
+
+  <div class="gcode">
+    <pre id="o-gcode"></pre>
+    <button class="btn small" id="btn-copy" type="button">Copia</button>
+  </div>
+
+  <div class="stats" id="stats"></div>
+  <div class="alerts" id="alerts"></div>
+
+  <details class="why" id="why">
+    <summary>Da dove vengono i numeri</summary>
+    <table id="why-t"></table>
+  </details>
+</aside>
+</div>
+
+<p class="note">I valori sono un punto di partenza calcolato da dati tabellari tipici e formule standard (assottigliamento truciolo, k<sub>c</sub> di Kienzle, trave a sbalzo per la flessione). Verifica sempre con il catalogo del produttore dell'utensile, parti prudente e ascolta il taglio.</p>
+</div>
+
+<div class="minidro" aria-hidden="true"><span><b>S</b><span id="mini-n">—</span></span><span><b>F</b><span id="mini-f">—</span><small>mm/min</small></span></div>
+
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const fmt=(v,d=0)=>Number.isFinite(v)?v.toLocaleString('it-IT',{minimumFractionDigits:d,maximumFractionDigits:d}):'—';
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+const RAD=Math.PI/180;
+
+const CLASS={N:'Non ferrosi',P:'Acciai',M:'Inox',K:'Ghise',S:'Superleghe e titanio',H:'Acciai temprati',O:'Plastiche e compositi',W:'Legno e derivati'};
+// vcC/vcH: Vc base m/min per metallo duro / HSS; cf: carico per dente ≈ cf·Ø (mm); kc: kc1.1 N/mm²; mc: esponente Kienzle
+const MATS=[
+ {id:'al6061',g:'N',name:'Alluminio 6061 / 6082',vcC:450,vcH:120,cf:.010,kc:700,mc:.25},
+ {id:'al7075',g:'N',name:'Alluminio 7075 (Ergal)',vcC:400,vcH:110,cf:.010,kc:800,mc:.25},
+ {id:'alcast',g:'N',name:'Alluminio da fusione (alto Si)',vcC:300,vcH:80,cf:.008,kc:750,mc:.25},
+ {id:'brass',g:'N',name:'Ottone CW614N',vcC:250,vcH:90,cf:.008,kc:780,mc:.18},
+ {id:'bronze',g:'N',name:'Bronzo CuSn',vcC:180,vcH:50,cf:.007,kc:1300,mc:.20},
+ {id:'copper',g:'N',name:'Rame Cu-ETP',vcC:200,vcH:60,cf:.006,kc:1100,mc:.20},
+ {id:'s235',g:'P',name:'Acciaio dolce S235 / C15',vcC:150,vcH:30,cf:.006,kc:1500,mc:.25},
+ {id:'c45',g:'P',name:'Acciaio C45',vcC:130,vcH:25,cf:.0055,kc:1700,mc:.25},
+ {id:'42crmo4',g:'P',name:'42CrMo4 bonificato ~30 HRC',vcC:100,vcH:18,cf:.005,kc:2000,mc:.25},
+ {id:'p20',g:'P',name:'Acciaio per stampi 1.2311',vcC:100,vcH:18,cf:.005,kc:2000,mc:.25},
+ {id:'ss304',g:'M',name:'Inox AISI 304',vcC:90,vcH:18,cf:.0045,kc:2000,mc:.21},
+ {id:'ss316',g:'M',name:'Inox AISI 316',vcC:80,vcH:15,cf:.0045,kc:2150,mc:.21},
+ {id:'ss174',g:'M',name:'Inox 17-4PH',vcC:70,vcH:12,cf:.004,kc:2400,mc:.21},
+ {id:'gg25',g:'K',name:'Ghisa grigia EN-GJL-250',vcC:130,vcH:25,cf:.006,kc:1100,mc:.28},
+ {id:'ggg50',g:'K',name:'Ghisa sferoidale EN-GJS-500',vcC:110,vcH:20,cf:.0055,kc:1300,mc:.28},
+ {id:'ti64',g:'S',name:'Titanio Ti6Al4V (grado 5)',vcC:50,vcH:12,cf:.004,kc:1450,mc:.23},
+ {id:'in718',g:'S',name:'Inconel 718',vcC:30,vcH:6,cf:.003,kc:2900,mc:.25},
+ {id:'h50',g:'H',name:'Acciaio temprato 48–55 HRC',vcC:70,vcH:0,cf:.0025,kc:3500,mc:.25},
+ {id:'pom',g:'O',name:'POM / Delrin',vcC:350,vcH:200,cf:.012,kc:300,mc:.30},
+ {id:'pmma',g:'O',name:'Plexiglass PMMA',vcC:300,vcH:180,cf:.010,kc:320,mc:.30},
+ {id:'hdpe',g:'O',name:'HDPE / PP',vcC:350,vcH:200,cf:.014,kc:150,mc:.30},
+ {id:'g10',g:'O',name:'Vetronite G10 / FR4',vcC:180,vcH:0,cf:.006,kc:450,mc:.30},
+ {id:'hardwood',g:'W',name:'Legno duro (faggio, rovere)',vcC:600,vcH:300,cf:.016,kc:120,mc:.30},
+ {id:'softwood',g:'W',name:'Legno tenero (abete, pino)',vcC:700,vcH:350,cf:.018,kc:80,mc:.30},
+ {id:'mdf',g:'W',name:'MDF / multistrato',vcC:600,vcH:300,cf:.018,kc:90,mc:.30},
+];
+const MAT=Object.fromEntries(MATS.map(m=>[m.id,m]));
+const COATS=[
+ {id:'none',name:'Non rivestito',m:{}},
+ {id:'tin',name:'TiN',m:{P:1.1,M:1.1,K:1.1,S:1.05}},
+ {id:'ticn',name:'TiCN',m:{P:1.2,M:1.15,K:1.2,S:1.1,H:1.05}},
+ {id:'altin',name:'AlTiN / TiAlN',m:{N:.85,P:1.35,M:1.3,K:1.3,S:1.25,H:1.3}},
+ {id:'zrn',name:'ZrN / DLC',m:{N:1.2,O:1.1}},
+ {id:'dia',name:'Diamante CVD',m:{N:1.4,O:1.3,W:1.3}},
+];
+const COAT=Object.fromEntries(COATS.map(c=>[c.id,c]));
+const MACHINES={
+ router:{rpmmax:24000,rpmmin:8000,kw:2.2,rpmbase:24000,fmax:5000,rigid:'0.6'},
+ bench:{rpmmax:10000,rpmmin:100,kw:1.1,rpmbase:3000,fmax:2500,rigid:'0.85'},
+ vmc:{rpmmax:12000,rpmmin:50,kw:15,rpmbase:1500,fmax:30000,rigid:'1'},
+};
+const FACE_FZ={N:.15,P:.15,M:.12,K:.18,S:.10,H:.08,O:.20,W:.20};
+const RAMP={N:3,P:2,M:1.5,K:2,S:1.5,H:1,O:5,W:5};
+const METAL='NPMKSH';
+
+const DEFAULT={
+ 'm-preset':'router','m-rpmmax':24000,'m-rpmmin':8000,'m-kw':2.2,'m-rpmbase':24000,'m-fmax':5000,'m-rigid':'0.6',
+ 'mat':'al6061','t-type':'flat','t-mat':'carb','t-coat':'zrn','t-d':6,'t-z':3,'t-r':1,'t-angle':90,'t-tip':0.2,'t-kappa':45,
+ 't-flute':18,'t-stick':25,'t-shank':6,'c-ap':6,'c-ae':1.2,'c-thin':true,'c-defl':true,'c-deflim':0.025,'c-pow':true,
+ 's-life':0,'s-finish':0
+};
+const IDS=Object.keys(DEFAULT);
+
+// --- popola select
+(function(){
+  const sel=$('mat');
+  for(const g of Object.keys(CLASS)){
+    const og=document.createElement('optgroup'); og.label=g+' · '+CLASS[g];
+    for(const m of MATS.filter(x=>x.g===g)){const o=document.createElement('option');o.value=m.id;o.textContent=m.name;og.appendChild(o)}
+    sel.appendChild(og);
+  }
+  const cs=$('t-coat');
+  for(const c of COATS){const o=document.createElement('option');o.value=c.id;o.textContent=c.name;cs.appendChild(o)}
+})();
+
+function setForm(s){
+  for(const id of IDS){const el=$(id); if(!el||!(id in s))continue;
+    if(el.type==='checkbox')el.checked=!!s[id]; else el.value=s[id];}
+}
+function getForm(){
+  const s={};
+  for(const id of IDS){const el=$(id);
+    if(el.type==='checkbox')s[id]=el.checked;
+    else if(el.type==='number'||el.type==='range'){const v=parseFloat(el.value);s[id]=Number.isFinite(v)?v:DEFAULT[id]}
+    else s[id]=el.value;}
+  return s;
+}
+const store={
+  get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+};
+
+// --- visibilità campi per tipo utensile
+function updateVisibility(){
+  const t=$('t-type').value;
+  document.querySelectorAll('[data-for]').forEach(el=>{
+    const f=el.dataset.for; let show=true;
+    if(f==='mill')show=t!=='drill';
+    else if(f==='bull')show=t==='bull';
+    else if(f==='vbit')show=t==='vbit';
+    else if(f==='face')show=t==='face';
+    else if(f==='notface')show=t!=='face';
+    else if(f==='notdrill')show=t!=='drill';
+    else if(f==='ae')show=t!=='drill'&&t!=='vbit';
+    el.hidden=!show;
+  });
+  $('lbl-ap').innerHTML=t==='drill'?'Profondità foro <em>mm</em>':'Profondità assiale a<sub>p</sub> <em>mm</em>';
+}
+
+// --- preset passata
+function applyPreset(p){
+  const s=getForm(), g=MAT[s.mat].g, D=s['t-d'], t=s['t-type'], Lf=s['t-flute'];
+  const r2=v=>Math.round(v*100)/100;
+  let ap,ae;
+  const soft='NOW'.includes(g), hard='MSH'.includes(g);
+  if(p==='slot'){ae=D; ap=soft?D*.75:(g==='P'||g==='K')?D*.4:D*.2}
+  else if(p==='rough'){ae=D*(soft?.4:hard?.2:.3); ap=D*(soft?1.5:hard?.8:1)}
+  else if(p==='hsm'){ae=D*(soft?.15:hard?.07:.1); ap=D*2.5}
+  else {ae=Math.max(.1,D*.03); ap=D*1.5}
+  if(t==='face'){ap=p==='finish'?.3:p==='rough'?(soft?3:2):1.5; ae=D*(p==='slot'?1:.7)}
+  if(t==='ball'&&p==='finish'){ae=D*.08; ap=D*.1}
+  if(t!=='face')ap=Math.min(ap,Lf);
+  $('c-ap').value=r2(ap); $('c-ae').value=r2(ae);
+  run();
+}
+
+// --- flessione: trave a sbalzo a due tratti (gambo + parte tagliente a 0,8·Ø)
+function deflection(F,L,Lf,D,Ds,E){
+  const I1=Math.PI*Math.pow(Ds,4)/64, I2=Math.PI*Math.pow(.8*D,4)/64;
+  const b=Math.min(Lf,L);
+  return F/(3*E)*((Math.pow(L,3)-Math.pow(b,3))/I1+Math.pow(b,3)/I2);
+}
+
+function calc(s){
+  const m=MAT[s.mat], g=m.g, metal=METAL.includes(g);
+  const tm=s['t-mat'], type=s['t-type'], coat=COAT[s['t-coat']];
+  const W=[]; const why=[];
+  const rigid=parseFloat(s['m-rigid']);
+  const D=Math.max(.1,s['t-d']);
+  const lifeM=1+s['s-life']/100*.25;
+  const finM=s['s-finish']<0?1+s['s-finish']/100*.4:1+s['s-finish']/100*.3;
+  const tmF=tm==='carb'?1:.8;
+  const dterm=d=>d<=12?d:12*Math.sqrt(d/12);
+
+  let vcBase=tm==='carb'?m.vcC:m.vcH*(tm==='hssco'?1.15:1);
+  if(tm!=='carb'&&m.vcH===0){W.push(['crit','<b>HSS non adatto</b> a '+m.name+': usa metallo duro.']);vcBase=m.vcC*.2}
+  const coatM=coat.m[g]??1;
+  if(coat.id==='altin'&&g==='N')W.push(['warn','<b>AlTiN su alluminio</b>: il rivestimento tende a impastarsi. Meglio ZrN/DLC o non rivestito lucido.']);
+  if(coat.id==='dia'&&'PMKH'.includes(g))W.push(['crit','<b>Il diamante non va sui ferrosi</b>: il carbonio diffonde nel ferro e il tagliente si consuma in pochi metri.']);
+  if(tm!=='carb'&&g==='H')W.push(['crit','<b>Acciaio temprato</b>: serve metallo duro rivestito.']);
+
+  const nMax=s['m-rpmmax'], nMin=s['m-rpmmin'];
+  const fmax=s['m-fmax'];
+  const res={type,g,metal,W,why};
+
+  if(type==='drill'){
+    const depth=s['c-ap'];
+    const vcT=vcBase*.7*coatM*lifeM;
+    why.push(['Vc base da tabella ('+(tm==='carb'?'MD':'HSS')+')',fmt(vcBase)+' m/min'],['Foratura ×0,70 · rivestimento ×'+fmt(coatM,2)+' · regolazione ×'+fmt(lifeM,2),''],['Vc obiettivo',fmt(vcT)+' m/min','sum']);
+    let n=vcT*1000/(Math.PI*D), lim=[];
+    if(n>nMax){n=nMax;lim.push('giri max')} if(n<nMin){n=nMin;lim.push('giri min')}
+    n=Math.round(n);
+    const vc=Math.PI*D*n/1000;
+    const fnT=m.cf*2.5*dterm(D)*tmF*(metal?rigid:1)*finM;
+    why.push(['Avanzamento giro base '+fmt(m.cf*2.5,4)+' × Ø',fmt(m.cf*2.5*dterm(D),3)+' mm/giro'],['Utensile ×'+fmt(tmF,2)+' · rigidità ×'+fmt(metal?rigid:1,2)+' · regolazione ×'+fmt(finM,2),''],['f obiettivo',fmt(fnT,3)+' mm/giro','sum']);
+    const sk=Math.sin(59*RAD);
+    const phys=fn=>{const vf=fn*n;const hm=fn/2*sk;const kc=m.kc*Math.pow(hm,-m.mc);const Pc=fn*vc*D*kc/240000;const M=Pc*9549/n;const Ff=.5*kc*D/2*fn*sk;return{fn,vf,hm,kc,Pc,M,Ff,mrr:Math.PI*D*D/4*vf/1000}};
+    let p=phys(fnT), k=1;
+    const Pav=s['m-kw']*Math.min(1,n/s['m-rpmbase'])*.85;
+    if(p.vf>fmax){k=Math.min(k,fmax/p.vf);lim.push('avanz. max')}
+    if(s['c-pow']&&p.Pc>Pav){const kp=Math.pow(Pav/p.Pc,1/(1-m.mc));if(kp<k){k=kp}lim.push('potenza')}
+    if(k<1)p=phys(fnT*k);
+    Object.assign(res,{n,vc,vcT,fnT,p,k,lim,Pav,D,depth});
+    if(p.Pc>Pav*1.001)W.push(['crit','<b>Potenza insufficiente</b>: servono '+fmt(p.Pc/.85,2)+' kW al mandrino, disponibili '+fmt(Pav/.85,2)+' kW a questi giri.']);
+    const ratio=depth/D;
+    if(ratio>3)W.push(['info','<b>Foro profondo ('+fmt(ratio,1)+'×Ø)</b>: usa ciclo G83 con scarico truciolo ogni '+fmt(D*(g==='N'?1.5:1),1)+' mm.']);
+    if(ratio>8)W.push(['warn','<b>Oltre 8×Ø</b>: fai prima un foro pilota corto con punta rigida e riduci l\'avanzamento del 20–30% in profondità.']);
+    if(n>=nMax&&vc<vcT*.7)W.push(['info','<b>Il mandrino limita i giri</b>: Vc reale '+fmt(vc)+' m/min ('+fmt(vc/vcT*100)+'% del consigliato).']);
+    if(n<=nMin&&vc>vcT*1.3)W.push(['crit','<b>Giri minimi troppo alti</b> per questo Ø: Vc '+fmt(vc)+' m/min, l\'utensile si brucia.']);
+    return res;
+  }
+
+  // ---- fresatura
+  const Z=Math.max(1,Math.round(s['t-z']));
+  let ap=Math.max(.001,s['c-ap']), ae=Math.max(.001,s['c-ae']);
+  let Deff=D, kappa=90, area=null;
+  if(type==='ball'){const R=D/2;if(ap<R){Deff=2*Math.sqrt(ap*(D-ap));kappa=Math.asin(Deff/D)/RAD}}
+  else if(type==='bull'){const r=clamp(s['t-r'],0,D/2);if(ap<r&&r>0){Deff=D-2*r+2*Math.sqrt(ap*(2*r-ap));kappa=Math.acos((r-ap)/r)/RAD}}
+  else if(type==='vbit'){const half=s['t-angle']/2;const d0=Math.max(0,s['t-tip']);Deff=Math.min(D,d0+2*ap*Math.tan(half*RAD));kappa=90-half;ae=Deff;area=ap*(d0+ap*Math.tan(half*RAD));
+    if(d0+2*ap*Math.tan(half*RAD)>D)W.push(['warn','<b>Profondità oltre il cono</b>: a '+fmt(ap,2)+' mm la V supera il Ø dell\'utensile.'])}
+  else if(type==='face'){kappa=clamp(s['t-kappa'],10,90)}
+  Deff=Math.max(Deff,.05);
+  const aeE=Math.min(ae,Deff), rr=aeE/Deff;
+  if(area===null)area=ap*aeE;
+
+  const aeBoost=rr>=.99?.9:rr>=.5?1:1+.4*Math.min(1,(.5-rr)/.4);
+  const vcT=vcBase*coatM*aeBoost*lifeM;
+  why.push(['Vc base da tabella ('+(tm==='carb'?'MD':tm==='hssco'?'HSS-Co':'HSS')+')',fmt(vcBase)+' m/min'],
+    ['Rivestimento '+coat.name,'×'+fmt(coatM,2)],
+    [rr>=.99?'Cava piena (più calore)':rr<.5?'Impegno radiale '+fmt(rr*100)+'% (meno calore)':'Impegno radiale '+fmt(rr*100)+'%','×'+fmt(aeBoost,2)],
+    ['Regolazione durata/produttività','×'+fmt(lifeM,2)],
+    ['Vc obiettivo',fmt(vcT)+' m/min','sum']);
+  if(Deff<D-1e-6)why.push(['Ø efficace alla profondità a<sub>p</sub>',fmt(Deff,2)+' mm']);
+
+  let n=vcT*1000/(Math.PI*Deff); const lim=[];
+  if(n>nMax){n=nMax;lim.push('giri max')} if(n<nMin){n=nMin;lim.push('giri min')}
+  n=Math.round(n);
+  const vc=Math.PI*Deff*n/1000;
+
+  const fzBase=type==='face'?FACE_FZ[g]:m.cf*dterm(D);
+  const slotF=rr>=.99?.85:1;
+  const rigF=metal?rigid:1;
+  const fzT=fzBase*tmF*rigF*finM*slotF;
+  why.push([type==='face'?'Carico per dente base (inserto)':'Carico per dente base '+fmt(m.cf,4)+' × Ø',fmt(fzBase,4)+' mm'],
+    ['Utensile ×'+fmt(tmF,2)+' · rigidità ×'+fmt(rigF,2)+' · regolazione ×'+fmt(finM,2)+(slotF<1?' · cava ×0,85':''),'×'+fmt(tmF*rigF*finM*slotF,2)],
+    ['Spessore truciolo obiettivo h<sub>ex</sub>',fmt(fzT,4)+' mm','sum']);
+
+  const radT=rr<.5?1/(2*Math.sqrt(rr-rr*rr)):1;
+  const leadT=1/Math.sin(kappa*RAD);
+  const thin=s['c-thin']?Math.min(5,radT*leadT):1;
+  if(s['c-thin']&&thin>1.001){
+    if(radT>1.001)why.push(['Assottigliamento radiale (a<sub>e</sub> < Ø/2)','×'+fmt(radT,2)]);
+    if(leadT>1.001)why.push([type==='ball'?'Assottigliamento assiale sfera':'Angolo di registro κ '+fmt(kappa)+'°','×'+fmt(leadT,2)]);
+    if(radT*leadT>5)why.push(['Limitato a ×5 per sicurezza','']);
+  }
+  const fzP=fzT*thin;
+
+  const L=s['t-stick'], Lf=s['t-flute'], Ds=s['t-shank']>0?s['t-shank']:D;
+  const E=tm==='carb'?620000:210000;
+  const phi=Math.acos(clamp(1-2*rr,-1,1));
+  const sinK=Math.sin(kappa*RAD);
+  const phys=fz=>{
+    const vf=fz*Z*n;
+    const hm=Math.max(1e-5,2*sinK*aeE*fz/(Deff*phi));
+    const kc=m.kc*Math.pow(hm,-m.mc);
+    const Pc=area*vf*kc/6e7;
+    const M=Pc*9549/n;
+    const F=2000*M/Deff;
+    const defl=type==='face'?0:deflection(F,L,Lf,D,Ds,E);
+    return{fz,vf,hm,kc,Pc,M,F,defl,mrr:area*vf/1000};
+  };
+  let p=phys(fzP), k=1;
+  const Pav=s['m-kw']*Math.min(1,n/s['m-rpmbase'])*.85;
+  const ex=1/(1-m.mc);
+  const dlim=s['c-deflim'];
+  const reasons=[];
+  if(p.vf>fmax){const kf=fmax/p.vf;if(kf<k)k=kf;reasons.push(['avanz. max',kf])}
+  if(s['c-pow']&&p.Pc>Pav){const kp=Math.pow(Pav/p.Pc,ex);if(kp<k)k=kp;reasons.push(['potenza',kp])}
+  if(s['c-defl']&&type!=='face'&&p.defl>dlim){const kd=Math.pow(dlim/p.defl,ex);if(kd<k)k=kd;reasons.push(['flessione',kd])}
+  reasons.sort((a,b)=>a[1]-b[1]); if(reasons.length)lim.push(reasons[0][0]);
+  if(k<1){p=phys(fzP*k);why.push(['Riduzione per '+reasons[0][0],'×'+fmt(k,2)])}
+  why.push(['f<sub>z</sub> programmato','<b>'+fmt(p.fz,4)+' mm</b>','sum']);
+  const hex=fzT*k;
+
+  Object.assign(res,{n,vc,vcT,D,Deff,Z,ap,ae:aeE,rr,kappa,thin,fzT,fzP,hex,p,k,lim,Pav,dlim,L,Lf});
+
+  // avvisi
+  const minChip=metal?(tm==='carb'?.008:.005):.02;
+  if(hex<minChip)W.push([metal?'warn':'crit','<b>Truciolo troppo sottile</b> ('+fmt(hex,4)+' mm): '+(metal?'l\'utensile sfrega e incrudisce invece di tagliare.':'la plastica fonde e si impasta sul tagliente.')+' Aumenta l\'avanzamento o riduci i giri.']);
+  if(k<.6&&reasons[0]&&reasons[0][0]==='flessione')W.push(['warn','<b>La flessione dimezza l\'avanzamento</b>: accorcia la sporgenza, riduci a<sub>p</sub>/a<sub>e</sub> o usa un utensile più grosso.']);
+  if(k<.6&&reasons[0]&&reasons[0][0]==='potenza')W.push(['warn','<b>Potenza al limite</b>: conviene ridurre a<sub>p</sub> o a<sub>e</sub> e tenere un truciolo più spesso.']);
+  if(p.Pc>Pav*1.001)W.push(['crit','<b>Potenza insufficiente</b>: servono '+fmt(p.Pc/.85,2)+' kW al mandrino, disponibili '+fmt(Pav/.85,2)+' kW a '+fmt(n)+' giri.']);
+  if(type!=='face'&&p.defl>dlim*1.001)W.push(['warn','<b>Flessione '+fmt(p.defl*1000)+' µm</b> oltre il limite di '+fmt(dlim*1000)+' µm: aspettati vibrazioni e quote fuori tolleranza.']);
+  if(type!=='face'&&ap>Lf)W.push(['crit','<b>a<sub>p</sub> oltre la lunghezza tagliente</b> ('+fmt(Lf,1)+' mm): il gambo strisciarebbe sul pezzo.']);
+  if(type!=='face'&&L/D>4)W.push(['info','<b>Sporgenza '+fmt(L/D,1)+'×Ø</b>: oltre 4×Ø la rigidità crolla con il cubo della lunghezza.']);
+  if(type!=='face'&&L<Lf)W.push(['info','<b>Sporgenza minore della lunghezza tagliente</b>: controlla i dati.']);
+  if(rr>=.99&&ap>D&&metal)W.push(['warn','<b>Cava profonda oltre 1×Ø</b>: evacuazione truciolo difficile. Usa aria/refrigerante o passa a una strategia trocoidale.']);
+  if(rr>=.99&&g==='N'&&Z>3&&type!=='face')W.push(['warn','<b>'+Z+' taglienti in cava su alluminio</b>: le gole si intasano. Per la cava usa 2–3 taglienti.']);
+  if(n>=nMax&&vc<vcT*.7)W.push(['info','<b>Il mandrino limita i giri</b>: Vc reale '+fmt(vc)+' m/min ('+fmt(vc/vcT*100)+'% del consigliato). Il truciolo resta corretto; puoi alzare a<sub>e</sub> invece della velocità.']);
+  if(n<=nMin&&vc>vcT*1.3)W.push(['crit','<b>Giri minimi troppo alti</b> per questo Ø: Vc '+fmt(vc)+' m/min contro '+fmt(vcT)+' consigliati. Rischio di bruciare il tagliente.']);
+  return res;
+}
+
+// --- render
+let last=null;
+function run(){
+  updateVisibility();
+  const s=getForm();
+  store.set('truciolo.current',s);
+  const r=calc(s); last=r;
+  const m=MAT[s.mat];
+  $('matline').innerHTML='<span class="iso '+m.g+'">'+m.g+'</span><span>Gruppo ISO '+m.g+' · '+CLASS[m.g]+' · k<sub>c1.1</sub> '+fmt(m.kc)+' N/mm²</span>';
+  $('s-life-v').textContent='Vc ×'+fmt(1+s['s-life']/100*.25,2);
+  $('s-finish-v').textContent='fz ×'+fmt(s['s-finish']<0?1+s['s-finish']/100*.4:1+s['s-finish']/100*.3,2);
+  const p=r.p;
+  $('o-n').textContent=fmt(r.n); $('o-f').textContent=fmt(Math.round(p.vf));
+  $('mini-n').textContent=fmt(r.n); $('mini-f').textContent=fmt(Math.round(p.vf));
+  $('o-sub').textContent='Vc '+fmt(r.vc)+' m/min · '+(r.type==='drill'?'f '+fmt(p.fn,3)+' mm/giro':'fz '+fmt(p.fz,4)+' mm');
+  const limEl=$('o-lim');
+  limEl.innerHTML=r.lim.length?r.lim.map(l=>'<span class="chip warn">limite: '+l+'</span>').join(''):'<span class="chip ok">nessun limite</span>';
+
+  const stats=[];
+  const gauge=(v,max)=>{const pc=clamp(v/max*100,0,100);const c=v>max*1.001?'crit':pc>85?'warn':'';return '<div class="gauge"><i class="'+c+'" style="width:'+pc.toFixed(1)+'%"></i></div>'};
+  const st=(k,n,u,sub,extra,full)=>stats.push('<div class="stat'+(full?' full':'')+'"><div class="k">'+k+'</div><div class="n">'+n+(u?'<small>'+u+'</small>':'')+'</div>'+(sub?'<div class="s">'+sub+'</div>':'')+(extra||'')+'</div>');
+  if(r.type==='drill'){
+    st('Avanzamento giro',fmt(p.fn,3),'mm/giro','obiettivo '+fmt(r.fnT,3));
+    st('Asportazione',fmt(p.mrr,1),'cm³/min');
+    st('Potenza al mandrino',fmt(p.Pc/.85,2),'kW','disponibile '+fmt(r.Pav/.85,2)+' kW',gauge(p.Pc,r.Pav));
+    st('Coppia',fmt(p.M,2),'N·m');
+    st('Spinta assiale',fmt(p.Ff),'N','k<sub>c</sub> '+fmt(p.kc)+' N/mm²');
+    st('Tempo per foro',fmt(r.depth/p.vf*60,1),'s','solo avanzamento, '+fmt(r.depth,1)+' mm');
+  } else {
+    const hexOK=r.hex>=(r.metal?.008:.02);
+    st('Spessore truciolo reale',fmt(r.hex,4),'mm','fz programmato '+fmt(p.fz,4)+(r.thin>1.001?' (×'+fmt(r.thin,2)+' assottigl.)':''),'<div class="gauge"><i class="'+(hexOK?'':'warn')+'" style="width:'+clamp(r.hex/r.fzT*100,0,100).toFixed(1)+'%"></i></div>');
+    st('Asportazione MRR',fmt(p.mrr,1),'cm³/min','a<sub>p</sub> '+fmt(r.ap,2)+' × a<sub>e</sub> '+fmt(r.ae,2)+' mm');
+    st('Potenza al mandrino',fmt(p.Pc/.85,2),'kW','disponibile '+fmt(r.Pav/.85,2)+' kW a '+fmt(r.n)+' giri',gauge(p.Pc,r.Pav));
+    st('Coppia',fmt(p.M,2),'N·m','forza di taglio '+fmt(p.F)+' N');
+    if(r.type!=='face')st('Flessione in punta',fmt(p.defl*1000,1),'µm','limite '+fmt(r.dlim*1000)+' µm · sporgenza '+fmt(r.L)+' mm',gauge(p.defl,r.dlim));
+    else st('Angolo registro',fmt(r.kappa),'°','spessore '+fmt(r.hex,3)+' mm');
+    // entrata nel pezzo
+    const ramp=RAMP[r.g]*(r.metal?1:1);
+    const plunge=r.hex*.5*r.Z*r.n;
+    if(r.type==='face')st('Entrata','in aria','','entra di lato con arco, mai in tuffo');
+    else st('Rampa / tuffo',fmt(ramp,1)+'°','','tuffo F'+fmt(Math.min(plunge,s['m-fmax']))+' · elica Ø '+fmt(r.D*1.3,1)+'–'+fmt(r.D*1.8,1)+' mm');
+    // finitura teorica
+    if(r.type==='ball'||r.type==='bull'){
+      const R=r.type==='ball'?r.D/2:Math.max(.001,s['t-r']);
+      const h=R-Math.sqrt(Math.max(0,R*R-(r.ae/2)*(r.ae/2)));
+      st('Cresta tra passate',fmt(h*1000,1),'µm','con passo a<sub>e</sub> '+fmt(r.ae,2)+' mm',null,true);
+    } else if(r.type!=='vbit'&&r.type!=='face'){
+      const h=p.fz*p.fz/(4*r.D);
+      st('Cresta da avanzamento (fianco)',fmt(h*1000,2),'µm','Ra teorica ≈ '+fmt(h*1000/4,2)+' µm',null,true);
+    }
+  }
+  $('stats').innerHTML=stats.join('');
+
+  const W=r.W.slice();
+  if(!W.length)W.push(['ok','<b>Parametri equilibrati.</b> Parti con l\'override al 100% e ascolta il taglio.']);
+  const order={crit:0,warn:1,info:2,ok:3};
+  W.sort((a,b)=>order[a[0]]-order[b[0]]);
+  $('alerts').innerHTML=W.map(w=>'<div class="alert '+w[0]+'">'+w[1]+'</div>').join('');
+
+  $('why-t').innerHTML=r.why.map(w=>'<tr'+(w[2]?' class="'+w[2]+'"':'')+'><td>'+w[0]+'</td><td>'+w[1]+'</td></tr>').join('');
+
+  let gc;
+  if(r.type==='drill'){
+    const q=r.depth/r.D>3?' Q'+fmt(r.D*(r.g==='N'?1.5:1),1).replace(',','.'):'';
+    gc='S'+r.n+' M3\n'+(q?'G83':'G81')+' Z-'+String(+r.depth.toFixed(3))+' R1.'+q+' F'+Math.round(p.vf);
+  } else gc='S'+r.n+' M3\nG1 F'+Math.round(p.vf);
+  $('o-gcode').textContent=gc;
+  $('cut-tag').textContent=r.type==='drill'?'foratura':r.rr>=.99?'cava piena':'impegno '+fmt(r.rr*100)+'% Ø';
+}
+
+// --- libreria
+function renderLib(){
+  const lib=store.get('truciolo.lib',[]);
+  $('lib-empty').hidden=lib.length>0;
+  $('lib-list').innerHTML=lib.map((it,i)=>{
+    const m=MAT[it.s.mat];
+    return '<li><div class="nm">'+esc(it.name)+'<small>Ø'+fmt(it.s['t-d'],1)+' Z'+it.s['t-z']+' · '+(m?esc(m.name):'')+'</small></div><div class="act"><button class="btn small" type="button" data-load="'+i+'">Carica</button><button class="btn small" type="button" data-del="'+i+'">Elimina</button></div></li>';
+  }).join('');
+}
+function esc(t){return String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+$('lib-save').addEventListener('click',()=>{
+  const nm=$('lib-name').value.trim()||('Impostazione '+new Date().toLocaleDateString('it-IT'));
+  const lib=store.get('truciolo.lib',[]); lib.unshift({name:nm,s:getForm()}); store.set('truciolo.lib',lib);
+  $('lib-name').value=''; renderLib();
+});
+let pendingDel=null;
+$('lib-list').addEventListener('click',e=>{
+  const b=e.target.closest('button'); if(!b)return;
+  const lib=store.get('truciolo.lib',[]);
+  if(b.dataset.load!==undefined){const it=lib[+b.dataset.load]; if(it){setForm(Object.assign({},DEFAULT,it.s));run()}}
+  if(b.dataset.del!==undefined){
+    const i=+b.dataset.del;
+    if(pendingDel===i){lib.splice(i,1);store.set('truciolo.lib',lib);pendingDel=null;renderLib()}
+    else{pendingDel=i;b.textContent='Conferma';setTimeout(()=>{if(pendingDel===i){pendingDel=null;renderLib()}},3000)}
+  }
+});
+
+// --- eventi
+$('m-preset').addEventListener('change',()=>{
+  const p=MACHINES[$('m-preset').value]; if(p){for(const k in p)$('m-'+k).value=p[k]} run();
+});
+['m-rpmmax','m-rpmmin','m-kw','m-rpmbase','m-fmax','m-rigid'].forEach(id=>$(id).addEventListener('input',()=>{$('m-preset').value='custom'}));
+$('t-d').addEventListener('change',()=>{ // gambo segue il diametro quando era uguale
+  const d=parseFloat($('t-d').value); if(Number.isFinite(d)&&d>=3)$('t-shank').value=Math.ceil(d);
+});
+$('t-type').addEventListener('change',()=>{
+  const t=$('t-type').value;
+  if(t==='face'){$('t-d').value=50;$('t-z').value=5;$('t-coat').value='ticn';$('t-kappa').value=45;applyPreset('rough');return}
+  if(t==='drill'){$('c-ap').value=Math.round(parseFloat($('t-d').value)*3*10)/10}
+  if(t==='vbit'){$('c-ap').value=1}
+  run();
+});
+document.querySelectorAll('[data-preset]').forEach(b=>b.addEventListener('click',()=>applyPreset(b.dataset.preset)));
+document.querySelector('.inputs').addEventListener('input',run);
+document.querySelector('.inputs').addEventListener('change',run);
+$('btn-reset').addEventListener('click',()=>{setForm(DEFAULT);run()});
+$('btn-copy').addEventListener('click',()=>{
+  const txt=$('o-gcode').textContent, b=$('btn-copy');
+  const done=()=>{b.textContent='Copiato';setTimeout(()=>b.textContent='Copia',1500)};
+  try{navigator.clipboard.writeText(txt).then(done,()=>selectPre())}catch(e){selectPre()}
+  function selectPre(){const r=document.createRange();r.selectNodeContents($('o-gcode'));const sel=getSelection();sel.removeAllRanges();sel.addRange(r);b.textContent='Selezionato'}
+});
+
+setForm(Object.assign({},DEFAULT,store.get('truciolo.current',{})));
+renderLib();
+run();
+window.__truciolo={calc,getForm,MAT};
+})();
+</script>

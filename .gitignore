@@ -1,0 +1,5 @@
+/target
+
+# Conflict copies made by the folder sync
+*.sync-conflict-*
+.DS_Store
