@@ -1,6 +1,6 @@
 name: release
 
-# Push a tag such as v0.1.0 to build every platform and publish a GitHub release.
+# Push a tag such as v0.1.0 to build installers for every platform and publish a GitHub release.
 on:
   push:
     tags: ["v*"]
@@ -24,11 +24,19 @@ jobs:
           lipo -create -output target/release/swarf-universal \
             target/aarch64-apple-darwin/release/swarf target/x86_64-apple-darwin/release/swarf
           BIN=target/release/swarf-universal ./scripts/bundle_macos.sh
+      - name: Disk image (.dmg)
+        run: |
+          hdiutil create -volname "Swarf" -srcfolder target/release/Swarf.app -ov -format UDZO \
+            "Swarf-${GITHUB_REF_NAME}-macos.dmg"
+      - name: Portable zip
+        run: |
           cd target/release && ditto -c -k --keepParent Swarf.app "Swarf-${GITHUB_REF_NAME}-macos.zip"
       - uses: actions/upload-artifact@v7
         with:
           name: macos
-          path: target/release/Swarf-*-macos.zip
+          path: |
+            Swarf-*-macos.dmg
+            target/release/Swarf-*-macos.zip
 
   windows:
     runs-on: windows-latest
@@ -37,13 +45,25 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --release
       - run: cargo build --release
-      - name: Package
+      - name: Portable zip
         shell: pwsh
         run: Compress-Archive -Path target/release/swarf.exe, LICENSE, README.md -DestinationPath "Swarf-$env:GITHUB_REF_NAME-windows-x64.zip"
+      - name: Install NSIS
+        shell: pwsh
+        run: choco install nsis -y --no-progress
+      - name: Installer (.exe)
+        shell: pwsh
+        run: |
+          $makensis = "C:\Program Files (x86)\NSIS\makensis.exe"
+          if (-not (Test-Path $makensis)) { $makensis = (Get-Command makensis).Source }
+          & $makensis /DVERSION=$env:GITHUB_REF_NAME /DROOT=$env:GITHUB_WORKSPACE "scripts\installer.nsi"
+          if (-not (Test-Path "Swarf-$env:GITHUB_REF_NAME-windows-x64-setup.exe")) { throw "installer not built" }
       - uses: actions/upload-artifact@v7
         with:
           name: windows
-          path: Swarf-*-windows-x64.zip
+          path: |
+            Swarf-*-windows-x64.zip
+            Swarf-*-windows-x64-setup.exe
 
   linux:
     runs-on: ubuntu-latest
@@ -53,17 +73,96 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libgl1-mesa-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev
       - run: cargo test --release
       - run: cargo build --release
-      - name: Package
+      - name: Portable tarball
         run: |
           DIR="Swarf-${GITHUB_REF_NAME}-linux-x64"
           mkdir "$DIR"
           cp target/release/swarf assets/swarf.desktop LICENSE README.md "$DIR/"
           cp assets/icon-256.png "$DIR/swarf.png"
           tar -czf "$DIR.tar.gz" "$DIR"
+      - name: Debian package (.deb)
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          ROOT="$PWD/debbuild"
+          mkdir -p "$ROOT/DEBIAN" "$ROOT/usr/bin" "$ROOT/usr/share/applications" \
+                   "$ROOT/usr/share/icons/hicolor/256x256/apps" "$ROOT/usr/share/doc/swarf"
+          install -m 0755 target/release/swarf "$ROOT/usr/bin/swarf"
+          install -m 0644 assets/swarf.desktop "$ROOT/usr/share/applications/swarf.desktop"
+          install -m 0644 assets/icon-256.png "$ROOT/usr/share/icons/hicolor/256x256/apps/swarf.png"
+          install -m 0644 LICENSE README.md "$ROOT/usr/share/doc/swarf/"
+          SIZE=$(du -sk "$ROOT/usr" | cut -f1)
+          printf '%s\n' \
+            'Package: swarf' \
+            "Version: $VER" \
+            'Section: science' \
+            'Priority: optional' \
+            'Architecture: amd64' \
+            "Installed-Size: $SIZE" \
+            'Maintainer: Michele Belleri' \
+            'Description: Speeds and feeds calculator for CNC milling and drilling' \
+            > "$ROOT/DEBIAN/control"
+          dpkg-deb --build --root-owner-group "$ROOT" "Swarf-${GITHUB_REF_NAME}-linux-x64.deb"
+      - name: RPM package (.rpm)
+        run: |
+          sudo apt-get install -y rpm
+          VER="${GITHUB_REF_NAME#v}"
+          TOP="$PWD/rpmbuild"
+          mkdir -p "$TOP/BUILD" "$TOP/RPMS" "$TOP/SOURCES" "$TOP/SPECS" "$TOP/SRPMS"
+          install -m 0755 target/release/swarf "$TOP/SOURCES/swarf"
+          install -m 0644 assets/swarf.desktop "$TOP/SOURCES/swarf.desktop"
+          install -m 0644 assets/icon-256.png "$TOP/SOURCES/icon-256.png"
+          cat > "$TOP/SPECS/swarf.spec" <<SPEC
+          Name:           swarf
+          Version:        $VER
+          Release:        1
+          Summary:        Speeds and feeds calculator for CNC milling and drilling
+          License:        GPL-3.0-or-later
+          URL:            https://github.com/TinyWorkshopDesign/swarf
+          BuildArch:      x86_64
+
+          %description
+          Swarf is a speeds and feeds calculator for CNC milling and drilling. It
+          computes spindle speed and feed for end mills, face mills and drills in
+          25 materials, and warns about tool deflection, spindle power and chip
+          thinning.
+
+          %install
+          mkdir -p %{buildroot}%{_bindir}
+          mkdir -p %{buildroot}%{_datadir}/applications
+          mkdir -p %{buildroot}%{_datadir}/icons/hicolor/256x256/apps
+          install -m 0755 %{_sourcedir}/swarf %{buildroot}%{_bindir}/swarf
+          install -m 0644 %{_sourcedir}/swarf.desktop %{buildroot}%{_datadir}/applications/swarf.desktop
+          install -m 0644 %{_sourcedir}/icon-256.png %{buildroot}%{_datadir}/icons/hicolor/256x256/apps/swarf.png
+
+          %files
+          %{_bindir}/swarf
+          %{_datadir}/applications/swarf.desktop
+          %{_datadir}/icons/hicolor/256x256/apps/swarf.png
+          SPEC
+          rpmbuild -bb --define "_topdir $TOP" "$TOP/SPECS/swarf.spec"
+          cp "$TOP"/RPMS/x86_64/*.rpm "Swarf-${GITHUB_REF_NAME}-linux-x64.rpm"
+      - name: AppImage
+        run: |
+          APPDIR="$PWD/AppDir"
+          mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" \
+                   "$APPDIR/usr/share/icons/hicolor/256x256/apps"
+          install -m 0755 target/release/swarf "$APPDIR/usr/bin/swarf"
+          install -m 0644 assets/icon-256.png "$APPDIR/usr/share/icons/hicolor/256x256/apps/swarf.png"
+          install -m 0644 assets/icon-256.png "$APPDIR/swarf.png"
+          cp assets/swarf.desktop "$APPDIR/swarf.desktop"
+          printf '%s\n' '#!/bin/sh' 'HERE="$(dirname "$(readlink -f "$0")")"' 'exec "$HERE/usr/bin/swarf" "$@"' > "$APPDIR/AppRun"
+          chmod +x "$APPDIR/AppRun"
+          wget -q "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" -O appimagetool
+          chmod +x appimagetool
+          ARCH=x86_64 ./appimagetool --appimage-extract-and-run "$APPDIR" "Swarf-${GITHUB_REF_NAME}-linux-x64.AppImage"
       - uses: actions/upload-artifact@v7
         with:
           name: linux
-          path: Swarf-*-linux-x64.tar.gz
+          path: |
+            Swarf-*-linux-x64.tar.gz
+            Swarf-*-linux-x64.deb
+            Swarf-*-linux-x64.rpm
+            Swarf-*-linux-x64.AppImage
 
   publish:
     needs: [macos, windows, linux]

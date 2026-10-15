@@ -40,9 +40,13 @@ Get the latest build for your system from the [Releases page](https://github.com
 
 | System | File | How to run |
 |---|---|---|
-| macOS (Apple Silicon and Intel) | `Swarf-…-macos.zip` | Unzip and drag **Swarf** into Applications. The app is not signed: the first time, right-click it and choose **Open**. |
-| Windows 10/11 (64-bit) | `Swarf-…-windows-x64.zip` | Unzip and run `swarf.exe`. If SmartScreen warns about an unknown publisher, choose **More info → Run anyway**. |
-| Linux (x86-64) | `Swarf-…-linux-x64.tar.gz` | Extract and run `./swarf`. Chinese, Japanese and Korean need a CJK font such as `fonts-noto-cjk`. |
+| macOS | `Swarf-…-macos.dmg` | Open the disk image and drag **Swarf** into Applications. The app is not signed: the first time, right-click it and choose **Open**. A portable `…-macos.zip` is also provided. |
+| Windows 10/11 (64-bit) | `Swarf-…-windows-x64-setup.exe` | Run the installer. If SmartScreen warns about an unknown publisher, choose **More info → Run anyway**. A portable `…-windows-x64.zip` is also provided. |
+| Debian / Ubuntu | `Swarf-…-linux-x64.deb` | `sudo apt install ./Swarf-…-linux-x64.deb` |
+| Fedora / openSUSE | `Swarf-…-linux-x64.rpm` | `sudo dnf install ./Swarf-…-linux-x64.rpm` (or `zypper install`) |
+| Any Linux | `Swarf-…-linux-x64.AppImage` | `chmod +x Swarf-…-linux-x64.AppImage` and run it. A portable `…-linux-x64.tar.gz` is also provided. |
+
+Chinese, Japanese and Korean need a CJK font such as `fonts-noto-cjk`.
 
 ## Build from source
 
@@ -77,7 +81,8 @@ cargo test
 - **macOS app bundle**: `./scripts/bundle_macos.sh` writes `target/release/Swarf.app`. Set `BUNDLE_ID` to your own reverse-domain identifier when distributing.
 - **Windows from a Mac**: with MinGW (`brew install mingw-w64`), `cargo build --release --target x86_64-pc-windows-gnu`. The icon is embedded by `build.rs`.
 - **Linux desktop entry**: copy `assets/swarf.desktop` to `~/.local/share/applications/` and `assets/icon-256.png` to `~/.local/share/icons/hicolor/256x256/apps/swarf.png`.
-- **Releases**: pushing a tag such as `v0.1.0` runs `.github/workflows/release.yml`, which builds all three platforms and publishes a GitHub release.
+- **Windows installer**: `scripts/installer.nsi` is an [NSIS](https://nsis.sourceforge.io) script; `makensis /DVERSION=<tag> /DROOT=<repo root> scripts/installer.nsi` writes the setup `.exe`. The icon comes from `assets/icon.ico`.
+- **Releases**: pushing a tag such as `v0.1.0` runs `.github/workflows/release.yml`, which builds every platform and attaches a macOS `.dmg` (universal), a Windows `setup.exe`, and Linux `.deb`, `.rpm` and `.AppImage` (plus portable archives) to a GitHub release.
 
 ## How the numbers are computed
 
@@ -105,6 +110,7 @@ Material data are typical values from machining handbooks, in `src/data.rs`. **T
 | `assets/` | Icon in every format and the Linux `.desktop` file |
 | `scripts/make_icon.py` | Regenerates every icon file (needs `rsvg-convert` and Pillow) |
 | `scripts/bundle_macos.sh` | Builds `Swarf.app` |
+| `scripts/installer.nsi` | NSIS script for the Windows setup `.exe` |
 | `prototipo/truciolo.html` | The first web prototype, kept for reference |
 
 ## Contributing
