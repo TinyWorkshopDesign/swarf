@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::ops::RangeInclusive;
 use swarf::calc::*;
 use swarf::data::*;
-use swarf::i18n::{K, Lang, material_name};
+use swarf::i18n::{K, Lang, hardness, material_name};
+use swarf::units::Units;
 
 pub const APP_NAME: &str = "Swarf";
 
@@ -19,7 +20,7 @@ pub struct Saved {
     pub compare: bool,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 enum Tab {
     Results,
     Charts,
@@ -29,6 +30,7 @@ enum Tab {
 #[serde(default)]
 pub struct App {
     lang: Lang,
+    units: Units,
     setup: Setup,
     library: Vec<Saved>,
     new_name: String,
@@ -40,7 +42,31 @@ pub struct App {
     copied_at: Option<f64>,
     #[serde(skip)]
     fonts: CjkFonts,
+    #[serde(skip)]
+    shots: Option<Shots>,
 }
+
+/// Screenshot mode (`SWARF_SCREENSHOT=<folder>`): starts from a clean state, saves one
+/// PNG per view and quits. Used for the README images and to check the layout.
+struct Shots {
+    dir: std::path::PathBuf,
+    step: usize,
+    frames: u32,
+    requested: bool,
+}
+
+/// Width of the saved screenshots, in pixels.
+const SHOT_WIDTH: u32 = 1600;
+
+/// Views captured in screenshot mode: file name, units, tab, setup changes.
+const SHOTS: &[(&str, Units, Tab, fn(&mut Setup))] = &[
+    ("results", Units::Metric, Tab::Results, |_| {}),
+    ("charts", Units::Metric, Tab::Charts, |_| {}),
+    ("manual", Units::Metric, Tab::Results, |s| {
+        s.speed_set = Some(SpeedSet::Rpm(18000.0));
+        s.feed_set = Some(FeedSet::Feed(2000.0));
+    }),
+];
 
 impl Default for App {
     fn default() -> Self {
@@ -48,6 +74,9 @@ impl Default for App {
             lang: sys_locale::get_locale()
                 .map(|l| Lang::from_locale(&l))
                 .unwrap_or(Lang::En),
+            units: sys_locale::get_locale()
+                .map(|l| Units::from_locale(&l))
+                .unwrap_or_default(),
             setup: Setup::default(),
             library: Vec::new(),
             new_name: String::new(),
@@ -56,6 +85,7 @@ impl Default for App {
             pending_delete: None,
             copied_at: None,
             fonts: CjkFonts::default(),
+            shots: None,
         }
     }
 }
@@ -66,10 +96,23 @@ impl App {
             s.spacing.item_spacing = vec2(8.0, 6.0);
             s.spacing.interact_size.y = 22.0;
         });
-        let mut app: App = cc
-            .storage
-            .and_then(|st| eframe::get_value(st, eframe::APP_KEY))
-            .unwrap_or_default();
+        let shots = std::env::var_os("SWARF_SCREENSHOT").map(|dir| Shots {
+            dir: dir.into(),
+            step: 0,
+            frames: 0,
+            requested: false,
+        });
+        let mut app: App = if shots.is_some() {
+            App {
+                lang: Lang::En,
+                ..App::default()
+            }
+        } else {
+            cc.storage
+                .and_then(|st| eframe::get_value(st, eframe::APP_KEY))
+                .unwrap_or_default()
+        };
+        app.shots = shots;
         app.fonts.apply(&cc.egui_ctx, app.lang, app.lang.is_cjk());
         app
     }
@@ -151,6 +194,58 @@ fn num(
     r.changed()
 }
 
+/// Like `num`, for a value stored in one unit and shown in another.
+#[allow(clippy::too_many_arguments)]
+fn num_conv(
+    ui: &mut Ui,
+    label: &str,
+    v: &mut f64,
+    range: RangeInclusive<f64>,
+    speed: f64,
+    suffix: &str,
+    dec: usize,
+    to: impl Fn(f64) -> f64,
+    from: impl Fn(f64) -> f64,
+) -> bool {
+    ui.label(label);
+    let mut x = to(*v);
+    let r = ui.add(
+        egui::DragValue::new(&mut x)
+            .range(to(*range.start())..=to(*range.end()))
+            .speed(to(speed))
+            .suffix(suffix)
+            .max_decimals(dec),
+    );
+    ui.end_row();
+    if r.changed() {
+        *v = from(x);
+    }
+    r.changed()
+}
+
+/// Length field: stored in mm, shown in mm or inches.
+fn num_len(
+    ui: &mut Ui,
+    u: Units,
+    label: &str,
+    v: &mut f64,
+    range: RangeInclusive<f64>,
+    speed: f64,
+    dec: usize,
+) -> bool {
+    num_conv(
+        ui,
+        label,
+        v,
+        range,
+        speed,
+        &format!(" {}", u.len_unit()),
+        u.len_dec(dec),
+        |x| u.len(x),
+        |x| u.from_len(x),
+    )
+}
+
 fn section(ui: &mut Ui, id: &str, title: &str, add: impl FnOnce(&mut Ui)) {
     // A fixed id keeps the open/closed state when the language changes.
     egui::CollapsingHeader::new(RichText::new(title.to_uppercase()).strong().size(15.0))
@@ -162,10 +257,13 @@ fn section(ui: &mut Ui, id: &str, title: &str, add: impl FnOnce(&mut Ui)) {
 
 impl eframe::App for App {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        eframe::set_value(storage, eframe::APP_KEY, self);
+        if self.shots.is_none() {
+            eframe::set_value(storage, eframe::APP_KEY, self);
+        }
     }
 
     fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
+        self.screenshot_step(ui.ctx());
         let p = pal(ui.visuals().dark_mode);
         let l = self.lang;
 
@@ -182,6 +280,11 @@ impl eframe::App for App {
                             ui.label(RichText::new(APP_NAME.to_uppercase()).size(28.0).strong());
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                 self.language_picker(ui);
+                                ui.add_space(4.0);
+                                ui.selectable_value(&mut self.units, Units::Inch, "in")
+                                    .on_hover_text(l.t(K::UnitsTip));
+                                ui.selectable_value(&mut self.units, Units::Metric, "mm")
+                                    .on_hover_text(l.t(K::UnitsTip));
                             });
                         });
                         ui.horizontal(|ui| {
@@ -228,6 +331,55 @@ impl eframe::App for App {
 }
 
 impl App {
+    /// Drives screenshot mode: set up a view, let it settle, capture, save, next.
+    fn screenshot_step(&mut self, ctx: &egui::Context) {
+        let Some(sh) = &mut self.shots else { return };
+        ctx.request_repaint();
+        let Some(&(name, units, tab, setup)) = SHOTS.get(sh.step) else {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            return;
+        };
+        if sh.frames == 0 {
+            self.setup = Setup::default();
+            setup(&mut self.setup);
+            self.units = units;
+            self.tab = tab;
+        }
+        sh.frames += 1;
+        let image = ctx.input(|i| {
+            i.raw.events.iter().find_map(|e| match e {
+                egui::Event::Screenshot { image, .. } => Some(image.clone()),
+                _ => None,
+            })
+        });
+        if let Some(img) = image {
+            let path = sh.dir.join(format!("{name}.png"));
+            let px: Vec<u8> = img.pixels.iter().flat_map(|c| c.to_array()).collect();
+            let [w, h] = img.size;
+            let saved = image::RgbaImage::from_raw(w as u32, h as u32, px)
+                .map(|im| {
+                    // Same width on every display density, as in the README.
+                    let (w, h) = im.dimensions();
+                    if w > SHOT_WIDTH {
+                        let h = (h as f64 * SHOT_WIDTH as f64 / w as f64).round() as u32;
+                        image::imageops::resize(&im, SHOT_WIDTH, h, image::imageops::Lanczos3)
+                    } else {
+                        im
+                    }
+                })
+                .map(|im| im.save(&path));
+            if let Some(Err(e)) = saved {
+                eprintln!("{}: {e}", path.display());
+            }
+            sh.step += 1;
+            sh.frames = 0;
+            sh.requested = false;
+        } else if sh.frames > 15 && !sh.requested {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
+            sh.requested = true;
+        }
+    }
+
     fn language_picker(&mut self, ui: &mut Ui) {
         let before = self.lang;
         let r = egui::ComboBox::from_id_salt("lang")
@@ -251,7 +403,18 @@ impl App {
     // ---------------------------------------------------------------- inputs
     fn inputs(&mut self, ui: &mut Ui, p: &Pal) {
         let l = self.lang;
+        let u = self.units;
         let s = &mut self.setup;
+        // Speed and feed set by hand belong to one tool in one material.
+        let basis = |s: &Setup| {
+            (
+                s.material_id.clone(),
+                s.tool.kind,
+                s.tool.material,
+                s.tool.d,
+            )
+        };
+        let basis0 = basis(s);
 
         section(ui, "machine", l.t(K::SecMachine), |ui| {
             let before = s.machine.preset;
@@ -290,14 +453,16 @@ impl App {
                         " rpm",
                         0,
                     );
-                    changed |= num(
+                    changed |= num_conv(
                         ui,
                         l.t(K::SpindlePower),
                         &mut m.kw,
                         0.05..=100.0,
                         0.05,
-                        " kW",
+                        &format!(" {}", u.power_unit()),
                         2,
+                        |x| u.power(x),
+                        |x| u.from_power(x),
                     );
                     ui.label(l.t(K::FullPowerFrom))
                         .on_hover_text(l.t(K::FullPowerTip));
@@ -311,14 +476,16 @@ impl App {
                         )
                         .changed();
                     ui.end_row();
-                    changed |= num(
+                    changed |= num_conv(
                         ui,
                         l.t(K::MaxFeed),
                         &mut m.feed_max,
                         10.0..=100_000.0,
                         50.0,
-                        " mm/min",
-                        0,
+                        &format!(" {}", u.feed_unit()),
+                        u.feed_dec(),
+                        |x| u.feed(x),
+                        |x| u.from_feed(x),
                     );
                     ui.label(l.t(K::Rigidity));
                     let r0 = m.rigidity;
@@ -338,6 +505,7 @@ impl App {
         });
 
         section(ui, "material", l.t(K::SecMaterial), |ui| {
+            let mat0 = s.material_id.clone();
             egui::ComboBox::from_id_salt("mat")
                 .width(ui.available_width())
                 .height(520.0)
@@ -370,6 +538,37 @@ impl App {
                     .color(p.muted),
                 );
             });
+            if s.material_id != mat0 {
+                s.hardness = None;
+            }
+            if let Some(c) = m.hardness_curve {
+                ui.horizontal(|ui| {
+                    let tip = l.f(K::HardnessTip, &[&hardness(l, m.hardness, c.hrc)]);
+                    ui.label(l.t(K::Hardness)).on_hover_text(&tip);
+                    let mut h = s.hardness();
+                    let (lo, hi) = c.range(m.hardness);
+                    let r = ui
+                        .add(
+                            egui::DragValue::new(&mut h)
+                                .range(lo..=hi)
+                                .speed(if c.hrc { 0.2 } else { 1.0 })
+                                .suffix(if c.hrc { " HRC" } else { " HB" })
+                                .max_decimals(0),
+                        )
+                        .on_hover_text(&tip);
+                    if r.changed() {
+                        s.hardness = Some(h);
+                    }
+                    if s.hardness.is_some()
+                        && ui
+                            .small_button("↺")
+                            .on_hover_text(l.t(K::HardnessReset))
+                            .clicked()
+                    {
+                        s.hardness = None;
+                    }
+                });
+            }
         });
 
         section(ui, "tool", l.t(K::SecTool), |ui| {
@@ -406,7 +605,7 @@ impl App {
                             }
                         });
                     ui.end_row();
-                    num(ui, l.t(K::Diameter), &mut t.d, 0.1..=250.0, 0.1, " mm", 2);
+                    num_len(ui, u, l.t(K::Diameter), &mut t.d, 0.1..=250.0, 0.1, 2);
                     if t.kind != ToolKind::Drill {
                         ui.label(l.t(K::Flutes));
                         ui.add(egui::DragValue::new(&mut t.z).range(1..=40).speed(0.1));
@@ -414,13 +613,13 @@ impl App {
                     }
                     match t.kind {
                         ToolKind::Bull => {
-                            num(
+                            num_len(
                                 ui,
+                                u,
                                 l.t(K::CornerR),
                                 &mut t.corner_r,
                                 0.0..=t.d / 2.0,
                                 0.05,
-                                " mm",
                                 2,
                             );
                         }
@@ -434,7 +633,7 @@ impl App {
                                 "°",
                                 0,
                             );
-                            num(ui, l.t(K::TipD), &mut t.tip_d, 0.0..=t.d, 0.05, " mm", 2);
+                            num_len(ui, u, l.t(K::TipD), &mut t.tip_d, 0.0..=t.d, 0.05, 2);
                         }
                         ToolKind::Face => {
                             num(
@@ -450,33 +649,25 @@ impl App {
                         _ => {}
                     }
                     if t.kind != ToolKind::Face {
-                        num(
+                        num_len(
                             ui,
+                            u,
                             l.t(K::FluteLen),
                             &mut t.flute_len,
                             0.1..=400.0,
                             0.5,
-                            " mm",
                             1,
                         );
-                        num(
+                        num_len(
                             ui,
+                            u,
                             l.t(K::Stickout),
                             &mut t.stickout,
                             0.5..=500.0,
                             0.5,
-                            " mm",
                             1,
                         );
-                        num(
-                            ui,
-                            l.t(K::ShankD),
-                            &mut t.shank_d,
-                            0.5..=100.0,
-                            0.1,
-                            " mm",
-                            2,
-                        );
+                        num_len(ui, u, l.t(K::ShankD), &mut t.shank_d, 0.5..=100.0, 0.1, 2);
                     }
                 });
             if t.d != d0 && t.d >= 3.0 && (t.shank_d - d0.ceil()).abs() < 1e-9 {
@@ -519,42 +710,42 @@ impl App {
                     } else {
                         l.t(K::AxialDepth)
                     };
-                    num(ui, lbl, &mut c.ap, 0.01..=500.0, 0.05, " mm", 2);
+                    num_len(ui, u, lbl, &mut c.ap, 0.01..=500.0, 0.05, 2);
                     if !matches!(kind, ToolKind::Drill | ToolKind::VBit) {
-                        num(
-                            ui,
-                            l.t(K::RadialWidth),
-                            &mut c.ae,
-                            0.01..=500.0,
-                            0.05,
-                            " mm",
-                            2,
-                        );
+                        num_len(ui, u, l.t(K::RadialWidth), &mut c.ae, 0.01..=500.0, 0.05, 2);
                     }
                 });
             if !matches!(kind, ToolKind::Drill | ToolKind::VBit) {
                 ui.checkbox(&mut c.chip_thinning, l.t(K::ChipThinning));
             }
+            if matches!(kind, ToolKind::Flat | ToolKind::Ball | ToolKind::Bull) {
+                ui.checkbox(&mut c.hsm, l.t(K::Hsm))
+                    .on_hover_text(l.t(K::HsmTip));
+            }
             if kind != ToolKind::Drill && kind != ToolKind::Face {
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut c.limit_deflection, l.t(K::LimitDeflection));
-                    let mut um = c.deflection_limit * 1000.0;
+                    let mut x = u.micro(c.deflection_limit * 1000.0);
                     if ui
                         .add(
-                            egui::DragValue::new(&mut um)
-                                .range(1.0..=500.0)
-                                .speed(1.0)
-                                .suffix(" µm")
-                                .max_decimals(0),
+                            egui::DragValue::new(&mut x)
+                                .range(u.micro(1.0)..=u.micro(500.0))
+                                .speed(u.micro(1.0))
+                                .suffix(format!(" {}", u.micro_unit()))
+                                .max_decimals(u.micro_dec(0)),
                         )
                         .changed()
                     {
-                        c.deflection_limit = um / 1000.0;
+                        c.deflection_limit = u.from_micro(x) / 1000.0;
                     }
                 });
             }
             ui.checkbox(&mut c.limit_power, l.t(K::LimitPower));
         });
+
+        if basis(s) != basis0 {
+            s.clear_manual();
+        }
 
         section(ui, "tweaks", l.t(K::SecTweaks), |ui| {
             let tw = &mut s.tweaks;
@@ -617,7 +808,7 @@ impl App {
                             ui.label(RichText::new(&item.name).strong());
                             let sub = format!(
                                 "Ø{} Z{} · {}",
-                                l.num(item.setup.tool.d, 1),
+                                l.len(u, item.setup.tool.d, 1),
                                 item.setup.tool.z,
                                 material_name(l, &item.setup.material_id)
                             );
@@ -659,6 +850,13 @@ impl App {
     // ---------------------------------------------------------------- DRO
     fn dro(&mut self, ui: &mut Ui, o: &Outcome, p: &Pal) {
         let l = self.lang;
+        let u = self.units;
+        let drill = o.kind == ToolKind::Drill;
+        let recommended = self.setup.is_manual().then(|| {
+            let mut s = self.setup.clone();
+            s.clear_manual();
+            compute(&s)
+        });
         egui::Frame::new()
             .fill(p.lcd_bg)
             .stroke(Stroke::new(3.0, ui.visuals().strong_text_color()))
@@ -669,7 +867,13 @@ impl App {
                 ui.horizontal(|ui| {
                     dro_axis(ui, p, "S", &l.num(o.rpm, 0), "rpm");
                     ui.add_space(40.0);
-                    dro_axis(ui, p, "F", &l.num(o.feed.round(), 0), "mm/min");
+                    dro_axis(
+                        ui,
+                        p,
+                        "F",
+                        &l.num(u.feed(o.feed), u.feed_dec()),
+                        u.feed_unit(),
+                    );
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         let copied = self
                             .copied_at
@@ -682,11 +886,11 @@ impl App {
                             })
                             .clicked()
                         {
-                            ui.ctx().copy_text(o.gcode());
+                            ui.ctx().copy_text(o.gcode(u));
                             self.copied_at = Some(ui.input(|i| i.time));
                         }
                         ui.label(
-                            RichText::new(o.gcode())
+                            RichText::new(o.gcode(u))
                                 .monospace()
                                 .size(14.0)
                                 .color(p.lcd_ink),
@@ -694,16 +898,59 @@ impl App {
                     });
                 });
                 ui.add(egui::Separator::default().spacing(6.0));
+
+                // Two-way editing: speed (Vc or S) and feed (fz or F), each pair linked.
+                let tip = l.t(K::EditTip);
+                let s = &mut self.setup;
                 ui.horizontal_wrapped(|ui| {
-                    let sub = if o.kind == ToolKind::Drill {
-                        l.f(
-                            K::SubDrill,
-                            &[&l.num(o.vc, 0), &l.num(o.fz, 3), l.t(K::UnitMmRev)],
-                        )
+                    let mut vc = u.speed(o.vc);
+                    if edit(ui, p, "Vc", &mut vc, 0, u.speed_unit(), tip) {
+                        s.speed_set = Some(SpeedSet::Vc(u.from_speed(vc).max(0.1)));
+                    }
+                    let mut fz = u.len(o.fz);
+                    let (name, unit, dec) = if drill {
+                        ("f", l.per_rev_unit(u), 3)
+                    } else {
+                        ("fz", u.len_unit(), 4)
+                    };
+                    if edit(ui, p, name, &mut fz, u.len_dec(dec), unit, tip) {
+                        s.feed_set = Some(FeedSet::PerTooth(u.from_len(fz).max(1e-5)));
+                    }
+                    let mut n = o.rpm;
+                    if edit(ui, p, "S", &mut n, 0, "rpm", tip) {
+                        s.speed_set = Some(SpeedSet::Rpm(n.max(1.0)));
+                    }
+                    let mut f = u.feed(o.feed);
+                    if edit(ui, p, "F", &mut f, u.feed_dec(), u.feed_unit(), tip) {
+                        s.feed_set = Some(FeedSet::Feed(u.from_feed(f).max(0.01)));
+                    }
+                    if s.is_manual() {
+                        chip(ui, l.t(K::ManualChip), p.warn);
+                        if ui
+                            .small_button("↺")
+                            .on_hover_text(l.t(K::ManualReset))
+                            .clicked()
+                        {
+                            s.clear_manual();
+                        }
+                    }
+                });
+                if let Some(r) = &recommended {
+                    ui.label(
+                        RichText::new(l.f(K::ManualRec, &[&l.num(r.rpm, 0), &l.feed(u, r.feed)]))
+                            .monospace()
+                            .size(12.0)
+                            .color(p.lcd_dim),
+                    );
+                }
+
+                ui.horizontal_wrapped(|ui| {
+                    let sub = if drill {
+                        l.f(K::SubDrill, &[&l.speed(u, o.vc), &l.per_rev(u, o.fz, 3)])
                     } else {
                         l.f(
                             K::SubMill,
-                            &[&l.num(o.vc, 0), &l.num(o.fz, 4), &l.num(o.chip, 4)],
+                            &[&l.speed(u, o.vc), &l.len(u, o.fz, 4), &l.len(u, o.chip, 4)],
                         )
                     };
                     ui.label(RichText::new(sub).monospace().color(p.lcd_dim));
@@ -721,6 +968,7 @@ impl App {
     // ---------------------------------------------------------------- results
     fn results(&mut self, ui: &mut Ui, o: &Outcome, p: &Pal) {
         let l = self.lang;
+        let u = self.units;
         let material_id = self.setup.material_id.clone();
         let cols = if ui.available_width() > 760.0 { 2 } else { 1 };
         ui.columns(cols, |c| {
@@ -730,7 +978,7 @@ impl App {
             } else {
                 (&mut c[0], None)
             };
-            stats(left, l, o, &self.setup, p);
+            stats(left, l, u, o, &self.setup, p);
             let ui = match right {
                 Some(r) => r,
                 None => left,
@@ -740,7 +988,7 @@ impl App {
                 alert(ui, p.ok, l.t(K::BalancedTitle), l.t(K::BalancedText));
             }
             for w in &o.warnings {
-                let (title, text) = l.warning(w, &material_id);
+                let (title, text) = l.warning(w, &material_id, u);
                 alert(ui, level_color(p, w.level), &title, &text);
             }
             ui.add_space(8.0);
@@ -754,7 +1002,7 @@ impl App {
                         .spacing([16.0, 4.0])
                         .show(ui, |ui| {
                             for r in &o.why {
-                                let (label, value) = l.row(r);
+                                let (label, value) = l.row(r, u);
                                 if r.total {
                                     ui.label(RichText::new(label).strong());
                                     ui.label(RichText::new(value).monospace().strong());
@@ -774,6 +1022,7 @@ impl App {
     // ---------------------------------------------------------------- charts
     fn charts(&mut self, ui: &mut Ui, o: &Outcome, p: &Pal) {
         let l = self.lang;
+        let u = self.units;
         let kind = self.setup.tool.kind;
         let radial_ok = !matches!(kind, ToolKind::Drill | ToolKind::VBit);
         if !radial_ok {
@@ -801,27 +1050,38 @@ impl App {
                 self.setup.cut.ae / self.setup.tool.d.max(0.1) * 100.0,
                 l.t(K::XRadial).to_string(),
             ),
-            SweepVar::Axial => (self.setup.cut.ap, format!("{depth_label} (mm)")),
+            SweepVar::Axial => (
+                u.len(self.setup.cut.ap),
+                format!("{depth_label} ({})", u.len_unit()),
+            ),
         };
         let h = ((ui.available_height() - 360.0) / 2.0).clamp(190.0, 300.0);
 
-        let mrr: Vec<[f64; 2]> = pts.iter().map(|q| [q.x, q.mrr]).collect();
+        let x = |q: &SweepPoint| match var {
+            SweepVar::Radial => q.x,
+            SweepVar::Axial => u.len(q.x),
+        };
+        let mrr: Vec<[f64; 2]> = pts.iter().map(|q| [x(q), u.mrr(q.mrr)]).collect();
         let mrr_lim: Vec<[f64; 2]> = pts
             .iter()
             .filter(|q| q.limited)
-            .map(|q| [q.x, q.mrr])
+            .map(|q| [x(q), u.mrr(q.mrr)])
             .collect();
-        let pw: Vec<[f64; 2]> = pts.iter().map(|q| [q.x, q.spindle_kw]).collect();
+        let pw: Vec<[f64; 2]> = pts.iter().map(|q| [x(q), u.power(q.spindle_kw)]).collect();
         let pw_lim: Vec<[f64; 2]> = pts
             .iter()
             .filter(|q| q.limited)
-            .map(|q| [q.x, q.spindle_kw])
+            .map(|q| [x(q), u.power(q.spindle_kw)])
             .collect();
-        let av: Vec<[f64; 2]> = pts.iter().map(|q| [q.x, q.avail_kw]).collect();
-        let (cur_mrr, cur_kw) = (o.mrr, o.spindle_kw);
+        let av: Vec<[f64; 2]> = pts.iter().map(|q| [x(q), u.power(q.avail_kw)]).collect();
+        let (cur_mrr, cur_kw) = (u.mrr(o.mrr), u.power(o.spindle_kw));
         let legend = || Legend::default().position(Corner::RightBottom);
 
-        ui.label(RichText::new(l.t(K::MrrTitle)).strong().color(p.mrr));
+        ui.label(
+            RichText::new(l.f(K::MrrTitle, &[u.mrr_unit()]))
+                .strong()
+                .color(p.mrr),
+        );
         Plot::new("mrr")
             .height(h)
             .link_axis("sweep", [true, false])
@@ -830,7 +1090,7 @@ impl App {
             .allow_zoom(false)
             .allow_drag(false)
             .include_y(0.0)
-            .y_axis_label("cm³/min")
+            .y_axis_label(u.mrr_unit())
             .legend(legend())
             .show(ui, |pu| {
                 pu.line(
@@ -854,7 +1114,11 @@ impl App {
                 );
             });
         ui.add_space(6.0);
-        ui.label(RichText::new(l.t(K::PowerTitle)).strong().color(p.power));
+        ui.label(
+            RichText::new(l.f(K::PowerTitle, &[u.power_unit()]))
+                .strong()
+                .color(p.power),
+        );
         Plot::new("power")
             .height(h)
             .link_axis("sweep", [true, false])
@@ -864,7 +1128,7 @@ impl App {
             .allow_drag(false)
             .include_y(0.0)
             .x_axis_label(xlabel)
-            .y_axis_label("kW")
+            .y_axis_label(u.power_unit())
             .legend(legend())
             .show(ui, |pu| {
                 pu.line(
@@ -905,6 +1169,7 @@ impl App {
         if kind != ToolKind::Drill {
             for st in Strategy::ALL {
                 let mut s = self.setup.clone();
+                s.clear_manual();
                 s.apply_strategy(st);
                 rows.push((l.strategy(st).into(), compute(&s), false));
             }
@@ -912,7 +1177,7 @@ impl App {
         for sv in self.library.iter().filter(|s| s.compare) {
             rows.push((sv.name.clone(), compute(&sv.setup), false));
         }
-        compare_bars(ui, l, &rows, p);
+        compare_bars(ui, l, u, &rows, p);
     }
 }
 
@@ -947,6 +1212,24 @@ fn dro_axis(ui: &mut Ui, p: &Pal, axis: &str, value: &str, unit: &str) {
             .color(p.lcd_ink),
     );
     ui.label(RichText::new(unit).monospace().size(12.0).color(p.lcd_dim));
+}
+
+/// Editable DRO value; returns true when the user changed it.
+fn edit(ui: &mut Ui, p: &Pal, name: &str, v: &mut f64, dec: usize, unit: &str, tip: &str) -> bool {
+    ui.label(RichText::new(name).monospace().strong().color(p.lcd_ink));
+    let speed = (v.abs() * 0.002).max(10f64.powi(-(dec as i32)));
+    let r = ui
+        .add(
+            egui::DragValue::new(v)
+                .range(0.0..=f64::MAX)
+                .speed(speed)
+                .min_decimals(dec)
+                .max_decimals(dec),
+        )
+        .on_hover_text(tip);
+    ui.label(RichText::new(unit).monospace().size(12.0).color(p.lcd_dim));
+    ui.add_space(10.0);
+    r.changed()
 }
 
 fn chip(ui: &mut Ui, text: &str, color: Color32) {
@@ -1043,40 +1326,45 @@ fn stat(ui: &mut Ui, p: &Pal, key: &str, value: String, unit: &str, sub: Option<
     }
 }
 
-fn stats(ui: &mut Ui, l: Lang, o: &Outcome, s: &Setup, p: &Pal) {
+fn stats(ui: &mut Ui, l: Lang, u: Units, o: &Outcome, s: &Setup, p: &Pal) {
     ui.label(RichText::new(l.t(K::Details).to_uppercase()).strong());
     egui::Frame::group(ui.style()).show(ui, |ui| {
         ui.set_width(ui.available_width());
+        let power = |ui: &mut Ui, sub: String| {
+            stat(
+                ui,
+                p,
+                l.t(K::SpindlePower),
+                l.num(u.power(o.spindle_kw), 2),
+                u.power_unit(),
+                Some(sub),
+            );
+            gauge(ui, o.spindle_kw, o.avail_kw, p);
+        };
+        let mrr = l.num(u.mrr(o.mrr), if u.inch() { 2 } else { 1 });
+        let torque = l.num(u.torque(o.torque), 2);
         if let Some(dr) = &o.drill {
             stat(
                 ui,
                 p,
                 l.t(K::FeedPerRev),
-                l.num(o.fz, 3),
-                l.t(K::UnitMmRev),
-                Some(l.f(K::TargetX, &[&l.num(o.chip_target, 3)])),
+                l.num(u.len(o.fz), u.len_dec(3)),
+                l.per_rev_unit(u),
+                Some(l.f(K::TargetX, &[&l.per_rev(u, o.chip_target, 3)])),
             );
             ui.separator();
-            stat(ui, p, l.t(K::Mrr), l.num(o.mrr, 1), "cm³/min", None);
+            stat(ui, p, l.t(K::Mrr), mrr, u.mrr_unit(), None);
             ui.separator();
-            stat(
-                ui,
-                p,
-                l.t(K::SpindlePower),
-                l.num(o.spindle_kw, 2),
-                "kW",
-                Some(l.f(K::AvailKw, &[&l.num(o.avail_kw, 2)])),
-            );
-            gauge(ui, o.spindle_kw, o.avail_kw, p);
+            power(ui, l.f(K::AvailKw, &[&l.power(u, o.avail_kw)]));
             ui.separator();
-            stat(ui, p, l.t(K::Torque), l.num(o.torque, 2), "N·m", None);
+            stat(ui, p, l.t(K::Torque), torque, u.torque_unit(), None);
             ui.separator();
             stat(
                 ui,
                 p,
                 l.t(K::Thrust),
-                l.num(dr.thrust_n, 0),
-                "N",
+                l.num(u.force(dr.thrust_n), 0),
+                u.force_unit(),
                 Some(format!("kc {} N/mm²", l.num(o.kc, 0))),
             );
             ui.separator();
@@ -1086,7 +1374,7 @@ fn stats(ui: &mut Ui, l: Lang, o: &Outcome, s: &Setup, p: &Pal) {
                 l.t(K::HoleTime),
                 l.num(dr.time_s, 1),
                 "s",
-                Some(l.f(K::FeedOnly, &[&l.num(dr.depth, 1)])),
+                Some(l.f(K::FeedOnly, &[&l.len(u, dr.depth, 1)])),
             );
             return;
         }
@@ -1099,9 +1387,9 @@ fn stats(ui: &mut Ui, l: Lang, o: &Outcome, s: &Setup, p: &Pal) {
             ui,
             p,
             l.t(K::ActualChip),
-            l.num(o.chip, 4),
-            "mm",
-            Some(format!("{}{thin}", l.f(K::ProgFz, &[&l.num(o.fz, 4)]))),
+            l.num(u.len(o.chip), u.len_dec(4)),
+            u.len_unit(),
+            Some(format!("{}{thin}", l.f(K::ProgFz, &[&l.len(u, o.fz, 4)]))),
         );
         // Full is good here: the bar shows how much of the target chip survives the limits.
         let frac = (o.chip / o.chip_target.max(1e-9)).clamp(0.0, 1.0);
@@ -1111,28 +1399,27 @@ fn stats(ui: &mut Ui, l: Lang, o: &Outcome, s: &Setup, p: &Pal) {
             ui,
             p,
             l.t(K::Mrr),
-            l.num(o.mrr, 1),
-            "cm³/min",
-            Some(format!("ap {} × ae {} mm", l.num(o.ap, 2), l.num(o.ae, 2))),
+            mrr,
+            u.mrr_unit(),
+            Some(format!(
+                "ap {} × ae {}",
+                l.len(u, o.ap, 2),
+                l.len(u, o.ae, 2)
+            )),
         );
         ui.separator();
-        stat(
+        power(
             ui,
-            p,
-            l.t(K::SpindlePower),
-            l.num(o.spindle_kw, 2),
-            "kW",
-            Some(l.f(K::AvailKwAt, &[&l.num(o.avail_kw, 2), &l.num(o.rpm, 0)])),
+            l.f(K::AvailKwAt, &[&l.power(u, o.avail_kw), &l.num(o.rpm, 0)]),
         );
-        gauge(ui, o.spindle_kw, o.avail_kw, p);
         ui.separator();
         stat(
             ui,
             p,
             l.t(K::Torque),
-            l.num(o.torque, 2),
-            "N·m",
-            Some(l.f(K::ForceKc, &[&l.num(o.force, 0), &l.num(o.kc, 0)])),
+            torque,
+            u.torque_unit(),
+            Some(l.f(K::ForceKc, &[&l.force(u, o.force), &l.num(o.kc, 0)])),
         );
         ui.separator();
         if let Some(d) = o.deflection {
@@ -1140,13 +1427,13 @@ fn stats(ui: &mut Ui, l: Lang, o: &Outcome, s: &Setup, p: &Pal) {
                 ui,
                 p,
                 l.t(K::TipDeflection),
-                l.num(d * 1000.0, 1),
-                "µm",
+                l.num(u.micro(d * 1000.0), u.micro_dec(1)),
+                u.micro_unit(),
                 Some(l.f(
                     K::DeflSub,
                     &[
-                        &l.num(o.deflection_limit * 1000.0, 0),
-                        &l.num(s.tool.stickout, 0),
+                        &l.micro(u, o.deflection_limit * 1000.0, 0),
+                        &l.len(u, s.tool.stickout, 0),
                     ],
                 )),
             );
@@ -1162,9 +1449,9 @@ fn stats(ui: &mut Ui, l: Lang, o: &Outcome, s: &Setup, p: &Pal) {
                 Some(l.f(
                     K::RampSub,
                     &[
-                        &l.num(plunge, 0),
-                        &l.num(o.d * 1.3, 1),
-                        &l.num(o.d * 1.8, 1),
+                        &l.num(u.feed(plunge), u.feed_dec()),
+                        &l.num(u.len(o.d * 1.3), u.len_dec(1)),
+                        &l.len(u, o.d * 1.8, 1),
                     ],
                 )),
             );
@@ -1191,9 +1478,9 @@ fn stats(ui: &mut Ui, l: Lang, o: &Outcome, s: &Setup, p: &Pal) {
                     ui,
                     p,
                     l.t(K::Scallop),
-                    l.num(h * 1000.0, 1),
-                    "µm",
-                    Some(l.f(K::ScallopSub, &[&l.num(o.ae, 2)])),
+                    l.num(u.micro(h * 1000.0), u.micro_dec(1)),
+                    u.micro_unit(),
+                    Some(l.f(K::ScallopSub, &[&l.len(u, o.ae, 2)])),
                 );
             }
             ToolKind::Flat => {
@@ -1203,9 +1490,9 @@ fn stats(ui: &mut Ui, l: Lang, o: &Outcome, s: &Setup, p: &Pal) {
                     ui,
                     p,
                     l.t(K::FeedCusp),
-                    l.num(h * 1000.0, 2),
-                    "µm",
-                    Some(l.f(K::RaSub, &[&l.num(h * 1000.0 / 4.0, 2)])),
+                    l.num(u.micro(h * 1000.0), u.micro_dec(2)),
+                    u.micro_unit(),
+                    Some(l.f(K::RaSub, &[&l.rough(u, h * 1000.0 / 4.0)])),
                 );
             }
             _ => {}
@@ -1214,7 +1501,7 @@ fn stats(ui: &mut Ui, l: Lang, o: &Outcome, s: &Setup, p: &Pal) {
 }
 
 /// Side-by-side horizontal bars: MRR and power (with a tick for available power).
-fn compare_bars(ui: &mut Ui, l: Lang, rows: &[(String, Outcome, bool)], p: &Pal) {
+fn compare_bars(ui: &mut Ui, l: Lang, u: Units, rows: &[(String, Outcome, bool)], p: &Pal) {
     let max_mrr = rows.iter().map(|r| r.1.mrr).fold(0.0, f64::max).max(1e-6);
     let max_kw = rows
         .iter()
@@ -1228,12 +1515,17 @@ fn compare_bars(ui: &mut Ui, l: Lang, rows: &[(String, Outcome, bool)], p: &Pal)
         ui.add_sized([name_w, 16.0], egui::Label::new(""));
         ui.add_sized(
             [bar_w, 16.0],
-            egui::Label::new(RichText::new("MRR cm³/min").small().strong().color(p.mrr)),
+            egui::Label::new(
+                RichText::new(format!("MRR {}", u.mrr_unit()))
+                    .small()
+                    .strong()
+                    .color(p.mrr),
+            ),
         );
         ui.add_sized(
             [bar_w, 16.0],
             egui::Label::new(
-                RichText::new(l.t(K::BarPower))
+                RichText::new(l.f(K::BarPower, &[u.power_unit()]))
                     .small()
                     .strong()
                     .color(p.power),
@@ -1256,25 +1548,33 @@ fn compare_bars(ui: &mut Ui, l: Lang, rows: &[(String, Outcome, bool)], p: &Pal)
                 [name_w, 26.0],
                 egui::Label::new(if *current { txt.strong() } else { txt }).truncate(),
             );
-            hbar(ui, bar_w, o.mrr / max_mrr, p.mrr, &l.num(o.mrr, 1), None, p);
+            hbar(
+                ui,
+                bar_w,
+                o.mrr / max_mrr,
+                p.mrr,
+                &l.num(u.mrr(o.mrr), if u.inch() { 2 } else { 1 }),
+                None,
+                p,
+            );
             let col = if o.power_ok() { p.power } else { p.crit };
             hbar(
                 ui,
                 bar_w,
                 o.spindle_kw / max_kw,
                 col,
-                &l.num(o.spindle_kw, 2),
+                &l.num(u.power(o.spindle_kw), 2),
                 Some((o.avail_kw / max_kw) as f32),
                 p,
             );
         })
         .response
         .on_hover_text(format!(
-            "S {} · F {} mm/min\nap {} · ae {} mm\n{limits}",
+            "S {} · F {}\nap {} · ae {}\n{limits}",
             l.num(o.rpm, 0),
-            l.num(o.feed, 0),
-            l.num(o.ap, 2),
-            l.num(o.ae, 2)
+            l.feed(u, o.feed),
+            l.len(u, o.ap, 2),
+            l.len(u, o.ae, 2)
         ));
     }
 }

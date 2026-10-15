@@ -3,8 +3,9 @@
 //! Every key carries all languages in one array, so the compiler rejects a key
 //! with a missing translation. Placeholders are `{0}`, `{1}`, … in order.
 
-use crate::calc::{Limiter, Msg, Row, Step, Unit, Warning};
+use crate::calc::{Limiter, Msg, Row, SLOT_FZ, Step, Unit, Warning};
 use crate::data::*;
+use crate::units::Units;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -121,6 +122,11 @@ impl Lang {
     }
 }
 
+/// Hardness with its unit, e.g. "220 HB" or "50 HRC".
+pub fn hardness(lang: Lang, v: f64, hrc: bool) -> String {
+    format!("{} {}", lang.num(v, 0), if hrc { "HRC" } else { "HB" })
+}
+
 pub fn fill(template: &str, args: &[&str]) -> String {
     let mut out = template.to_string();
     for (i, a) in args.iter().enumerate() {
@@ -145,6 +151,11 @@ strings! {
     AppSubtitle => ["Cutting speeds and feeds for CNC milling and drilling", "Velocità e avanzamenti per fresatura e foratura CNC", "Schnittdaten für CNC-Fräsen und -Bohren", "Vitesses de coupe et avances pour le fraisage et le perçage CNC", "Velocidades de corte y avances para fresado y taladrado CNC", "CNC 铣削与钻削的切削速度和进给", "CNCフライス加工・穴あけの切削条件", "CNC 밀링·드릴링 절삭 속도와 이송"],
     LoadExample => ["Load example", "Esempio iniziale", "Beispiel laden", "Charger l'exemple", "Cargar ejemplo", "载入示例", "例を読み込む", "예제 불러오기"],
     LoadExampleTip => ["Restore the example values", "Ripristina i valori di esempio", "Beispielwerte wiederherstellen", "Rétablir les valeurs d'exemple", "Restaurar los valores de ejemplo", "恢复示例数值", "例の値に戻す", "예제 값으로 되돌리기"],
+    UnitsTip => ["Units", "Unità di misura", "Einheiten", "Unités", "Unidades", "单位", "単位", "단위"],
+    ManualChip => ["set by hand", "impostato a mano", "von Hand gesetzt", "saisi à la main", "fijado a mano", "手动设定", "手動設定", "수동 설정"],
+    ManualReset => ["Back to the recommended values", "Torna ai valori consigliati", "Zurück zu den empfohlenen Werten", "Revenir aux valeurs recommandées", "Volver a los valores recomendados", "恢复推荐值", "推奨値に戻す", "권장값으로 되돌리기"],
+    ManualRec => ["recommended S {0} · F {1}", "consigliato S {0} · F {1}", "empfohlen S {0} · F {1}", "recommandé S {0} · F {1}", "recomendado S {0} · F {1}", "推荐 S {0} · F {1}", "推奨 S {0} · F {1}", "권장 S {0} · F {1}"],
+    EditTip => ["Type or drag to set it by hand. Speed (Vc or S) and feed (fz or F) are independent; the other value of each pair follows. Values set by hand skip the automatic reductions, but the warnings stay.", "Scrivi o trascina per impostarlo a mano. Velocità (Vc o S) e avanzamento (fz o F) sono indipendenti; l'altro valore di ogni coppia si adegua. I valori a mano saltano le riduzioni automatiche, ma gli avvisi restano.", "Eintippen oder ziehen, um den Wert von Hand zu setzen. Geschwindigkeit (Vc oder S) und Vorschub (fz oder F) sind unabhängig; der jeweils andere Wert folgt. Von Hand gesetzte Werte umgehen die automatischen Reduzierungen, die Hinweise bleiben.", "Saisissez ou faites glisser pour fixer la valeur à la main. Vitesse (Vc ou S) et avance (fz ou F) sont indépendantes ; l'autre valeur de chaque paire suit. Les valeurs saisies ignorent les réductions automatiques, mais les avertissements restent.", "Escribe o arrastra para fijarlo a mano. Velocidad (Vc o S) y avance (fz o F) son independientes; el otro valor de cada par se ajusta. Los valores a mano se saltan las reducciones automáticas, pero los avisos siguen.", "输入或拖动即可手动设定。速度（Vc 或 S）与进给（fz 或 F）相互独立，每组中的另一个值随之变化。手动值不再自动降低，但提示仍会显示。", "入力またはドラッグで手動設定できます。速度（VcかS）と送り（fzかF）は独立で、各組のもう一方が追従します。手動の値には自動低減がかかりませんが、注意は表示されます。", "입력하거나 드래그해 수동으로 설정합니다. 속도(Vc 또는 S)와 이송(fz 또는 F)은 독립이며, 각 쌍의 다른 값이 따라갑니다. 수동 값에는 자동 감소가 적용되지 않지만 경고는 표시됩니다."],
     Language => ["Language", "Lingua", "Sprache", "Langue", "Idioma", "语言", "言語", "언어"],
 
     SecMachine => ["Machine", "Macchina", "Maschine", "Machine", "Máquina", "机床", "機械", "기계"],
@@ -170,6 +181,9 @@ strings! {
     PresetCustom => ["Custom", "Personalizzata", "Benutzerdefiniert", "Personnalisée", "Personalizada", "自定义", "カスタム", "사용자 지정"],
 
     GroupLine => ["ISO group {0} · {1} · kc1.1 {2} N/mm²", "Gruppo ISO {0} · {1} · kc1.1 {2} N/mm²", "ISO-Gruppe {0} · {1} · kc1.1 {2} N/mm²", "Groupe ISO {0} · {1} · kc1.1 {2} N/mm²", "Grupo ISO {0} · {1} · kc1.1 {2} N/mm²", "ISO 组 {0} · {1} · kc1.1 {2} N/mm²", "ISOグループ {0} · {1} · kc1.1 {2} N/mm²", "ISO 그룹 {0} · {1} · kc1.1 {2} N/mm²"],
+    Hardness => ["Hardness", "Durezza", "Härte", "Dureté", "Dureza", "硬度", "硬さ", "경도"],
+    HardnessTip => ["Cutting speed is corrected for the difference from the nominal hardness ({0}), with the Sandvik Coromant factors.", "La velocità di taglio viene corretta per la differenza dalla durezza nominale ({0}), con i fattori Sandvik Coromant.", "Die Schnittgeschwindigkeit wird für die Abweichung von der Nennhärte ({0}) korrigiert, mit den Faktoren von Sandvik Coromant.", "La vitesse de coupe est corrigée selon l'écart à la dureté nominale ({0}), avec les facteurs Sandvik Coromant.", "La velocidad de corte se corrige según la diferencia con la dureza nominal ({0}), con los factores de Sandvik Coromant.", "切削速度按与名义硬度（{0}）的差值修正，采用 Sandvik Coromant 系数。", "切削速度は公称硬さ（{0}）との差で補正されます（Sandvik Coromantの係数）。", "절삭 속도는 공칭 경도({0})와의 차이에 따라 Sandvik Coromant 계수로 보정됩니다."],
+    HardnessReset => ["Back to the nominal hardness", "Torna alla durezza nominale", "Zurück zur Nennhärte", "Revenir à la dureté nominale", "Volver a la dureza nominal", "恢复名义硬度", "公称硬さに戻す", "공칭 경도로 되돌리기"],
     IsoN => ["Non-ferrous", "Non ferrosi", "NE-Metalle", "Non ferreux", "No ferrosos", "有色金属", "非鉄金属", "비철금속"],
     IsoP => ["Steels", "Acciai", "Stähle", "Aciers", "Aceros", "钢", "鋼", "강"],
     IsoM => ["Stainless steels", "Inox", "Rostfreie Stähle", "Aciers inoxydables", "Aceros inoxidables", "不锈钢", "ステンレス鋼", "스테인리스강"],
@@ -213,6 +227,8 @@ strings! {
     AxialShort => ["Depth ap", "Profondità ap", "Tiefe ap", "Profondeur ap", "Profundidad ap", "切深 ap", "切込み ap", "절입 ap"],
     RadialWidth => ["Radial width ae", "Larghezza radiale ae", "Schnittbreite ae", "Engagement radial ae", "Ancho radial ae", "径向切宽 ae", "径方向切込み ae", "반경방향 절입 ae"],
     ChipThinning => ["Compensate chip thinning", "Compensa assottigliamento truciolo", "Spanausdünnung ausgleichen", "Compenser l'amincissement du copeau", "Compensar el adelgazamiento de viruta", "补偿切屑减薄", "切りくず薄化を補正", "칩 두께 감소 보정"],
+    Hsm => ["High-speed machining (HSM)", "Fresatura ad alta velocità (HSM)", "Hochgeschwindigkeitsfräsen (HSC)", "Usinage grande vitesse (UGV)", "Mecanizado de alta velocidad (HSM)", "高速加工（HSM）", "高速加工（HSM）", "고속 가공(HSM)"],
+    HsmTip => ["Raises cutting speed at low radial engagement, as tool makers allow for trochoidal and adaptive toolpaths (Kennametal factors). Use it only with constant engagement and a rigid setup.", "Alza la velocità di taglio con impegno radiale basso, come ammettono i produttori per i percorsi trocoidali e adattivi (fattori Kennametal). Usala solo con impegno costante e un setup rigido.", "Erhöht die Schnittgeschwindigkeit bei kleiner Schnittbreite, wie es Werkzeughersteller für trochoidale und adaptive Bahnen zulassen (Kennametal-Faktoren). Nur bei konstanter Zustellung und steifem Aufbau verwenden.", "Augmente la vitesse de coupe à faible engagement radial, comme l'admettent les fabricants pour les trajectoires trochoïdales et adaptatives (facteurs Kennametal). À utiliser seulement avec un engagement constant et un montage rigide.", "Sube la velocidad de corte con poco ancho radial, como admiten los fabricantes para trayectorias trocoidales y adaptativas (factores Kennametal). Úsala solo con ancho constante y un montaje rígido.", "在小径向切宽时提高切削速度，这是刀具厂商对摆线和自适应路径的建议（Kennametal 系数）。仅在切宽恒定且装夹刚性好时使用。", "径方向切込みが小さいとき切削速度を上げます。工具メーカーがトロコイド・アダプティブ加工に認める値です（Kennametalの係数）。切込み一定で剛性の高い条件でのみ使ってください。", "반경방향 절입이 작을 때 절삭 속도를 높입니다. 공구 제조사가 트로코이달·어댑티브 경로에 허용하는 값입니다(Kennametal 계수). 절입이 일정하고 강성이 높을 때만 쓰세요."],
     LimitDeflection => ["Limit deflection to", "Limita flessione a", "Durchbiegung begrenzen auf", "Limiter la flexion à", "Limitar la deflexión a", "挠度限制为", "たわみの上限", "처짐 한계"],
     LimitPower => ["Reduce feed when power is short", "Riduci l'avanzamento se la potenza non basta", "Vorschub senken, wenn die Leistung nicht reicht", "Réduire l'avance si la puissance manque", "Reducir el avance si falta potencia", "功率不足时降低进给", "出力不足時は送りを下げる", "출력이 부족하면 이송 감소"],
 
@@ -233,8 +249,8 @@ strings! {
     CopyGcode => ["Copy G-code", "Copia G-code", "G-Code kopieren", "Copier le G-code", "Copiar código G", "复制 G 代码", "Gコードをコピー", "G코드 복사"],
     Copied => ["Copied", "Copiato", "Kopiert", "Copié", "Copiado", "已复制", "コピーしました", "복사됨"],
     UnitMmRev => ["mm/rev", "mm/giro", "mm/U", "mm/tr", "mm/rev", "mm/转", "mm/rev", "mm/rev"],
-    SubDrill => ["Vc {0} m/min · f {1} {2}", "Vc {0} m/min · f {1} {2}", "Vc {0} m/min · f {1} {2}", "Vc {0} m/min · f {1} {2}", "Vc {0} m/min · f {1} {2}", "Vc {0} m/min · f {1} {2}", "Vc {0} m/min · f {1} {2}", "Vc {0} m/min · f {1} {2}"],
-    SubMill => ["Vc {0} m/min · fz {1} mm · actual chip {2} mm", "Vc {0} m/min · fz {1} mm · truciolo reale {2} mm", "Vc {0} m/min · fz {1} mm · reale Spandicke {2} mm", "Vc {0} m/min · fz {1} mm · copeau réel {2} mm", "Vc {0} m/min · fz {1} mm · viruta real {2} mm", "Vc {0} m/min · fz {1} mm · 实际切屑厚度 {2} mm", "Vc {0} m/min · fz {1} mm · 実切りくず厚さ {2} mm", "Vc {0} m/min · fz {1} mm · 실제 칩 두께 {2} mm"],
+    SubDrill => ["Vc {0} · f {1}", "Vc {0} · f {1}", "Vc {0} · f {1}", "Vc {0} · f {1}", "Vc {0} · f {1}", "Vc {0} · f {1}", "Vc {0} · f {1}", "Vc {0} · f {1}"],
+    SubMill => ["Vc {0} · fz {1} · actual chip {2}", "Vc {0} · fz {1} · truciolo reale {2}", "Vc {0} · fz {1} · reale Spandicke {2}", "Vc {0} · fz {1} · copeau réel {2}", "Vc {0} · fz {1} · viruta real {2}", "Vc {0} · fz {1} · 实际切屑厚度 {2}", "Vc {0} · fz {1} · 実切りくず厚さ {2}", "Vc {0} · fz {1} · 실제 칩 두께 {2}"],
     NoLimit => ["no limit", "nessun limite", "keine Begrenzung", "aucune limite", "sin límite", "无限制", "制限なし", "제한 없음"],
     LimitChip => ["limit: {0}", "limite: {0}", "Grenze: {0}", "limite : {0}", "límite: {0}", "限制：{0}", "制限：{0}", "제한: {0}"],
     LimRpmMax => ["max rpm", "giri max", "max. Drehzahl", "vitesse max.", "rpm máx.", "最高转速", "最高回転数", "최고 회전수"],
@@ -255,34 +271,34 @@ strings! {
     FeedPerRev => ["Feed per revolution", "Avanzamento al giro", "Vorschub pro Umdrehung", "Avance par tour", "Avance por vuelta", "每转进给", "1回転あたり送り", "회전당 이송"],
     TargetX => ["target {0}", "obiettivo {0}", "Ziel {0}", "cible {0}", "objetivo {0}", "目标 {0}", "目標 {0}", "목표 {0}"],
     Mrr => ["Material removal rate", "Asportazione", "Zeitspanvolumen", "Débit de copeaux", "Tasa de arranque", "材料去除率", "切削体積", "소재 제거율"],
-    AvailKw => ["available {0} kW", "disponibile {0} kW", "verfügbar {0} kW", "disponible {0} kW", "disponible {0} kW", "可用 {0} kW", "使用可能 {0} kW", "사용 가능 {0} kW"],
-    AvailKwAt => ["available {0} kW at {1} rpm", "disponibile {0} kW a {1} giri", "verfügbar {0} kW bei {1} 1/min", "disponible {0} kW à {1} tr/min", "disponible {0} kW a {1} rpm", "{1} rpm 时可用 {0} kW", "{1} rpmで使用可能 {0} kW", "{1} rpm에서 사용 가능 {0} kW"],
+    AvailKw => ["available {0}", "disponibile {0}", "verfügbar {0}", "disponible {0}", "disponible {0}", "可用 {0}", "使用可能 {0}", "사용 가능 {0}"],
+    AvailKwAt => ["available {0} at {1} rpm", "disponibile {0} a {1} giri", "verfügbar {0} bei {1} 1/min", "disponible {0} à {1} tr/min", "disponible {0} a {1} rpm", "{1} rpm 时可用 {0}", "{1} rpmで使用可能 {0}", "{1} rpm에서 사용 가능 {0}"],
     Torque => ["Torque", "Coppia", "Drehmoment", "Couple", "Par", "扭矩", "トルク", "토크"],
     Thrust => ["Axial thrust", "Spinta assiale", "Vorschubkraft", "Effort axial", "Empuje axial", "轴向推力", "スラスト力", "추력"],
     HoleTime => ["Time per hole", "Tempo per foro", "Zeit pro Bohrung", "Temps par trou", "Tiempo por agujero", "单孔时间", "1穴あたり時間", "구멍당 시간"],
-    FeedOnly => ["feed only, {0} mm", "solo avanzamento, {0} mm", "nur Vorschub, {0} mm", "avance seule, {0} mm", "solo avance, {0} mm", "仅进给，{0} mm", "送りのみ、{0} mm", "이송만, {0} mm"],
+    FeedOnly => ["feed only, {0}", "solo avanzamento, {0}", "nur Vorschub, {0}", "avance seule, {0}", "solo avance, {0}", "仅进给，{0}", "送りのみ、{0}", "이송만, {0}"],
     ActualChip => ["Actual chip thickness", "Spessore truciolo reale", "Tatsächliche Spandicke", "Épaisseur de copeau réelle", "Espesor de viruta real", "实际切屑厚度", "実切りくず厚さ", "실제 칩 두께"],
     ProgFz => ["programmed fz {0}", "fz programmato {0}", "programmiertes fz {0}", "fz programmé {0}", "fz programado {0}", "编程 fz {0}", "指令 fz {0}", "지령 fz {0}"],
     ThinningX => [" (×{0} thinning)", " (×{0} assottigl.)", " (×{0} Ausdünnung)", " (×{0} amincissement)", " (×{0} adelgazamiento)", "（×{0} 减薄）", "（×{0} 薄化）", " (×{0} 감소)"],
-    ForceKc => ["cutting force {0} N · kc {1} N/mm²", "forza di taglio {0} N · kc {1} N/mm²", "Schnittkraft {0} N · kc {1} N/mm²", "effort de coupe {0} N · kc {1} N/mm²", "fuerza de corte {0} N · kc {1} N/mm²", "切削力 {0} N · kc {1} N/mm²", "切削抵抗 {0} N · kc {1} N/mm²", "절삭력 {0} N · kc {1} N/mm²"],
+    ForceKc => ["cutting force {0} · kc {1} N/mm²", "forza di taglio {0} · kc {1} N/mm²", "Schnittkraft {0} · kc {1} N/mm²", "effort de coupe {0} · kc {1} N/mm²", "fuerza de corte {0} · kc {1} N/mm²", "切削力 {0} · kc {1} N/mm²", "切削抵抗 {0} · kc {1} N/mm²", "절삭력 {0} · kc {1} N/mm²"],
     TipDeflection => ["Tip deflection", "Flessione in punta", "Durchbiegung an der Spitze", "Flexion en bout", "Deflexión en la punta", "刀尖挠度", "先端たわみ", "선단 처짐"],
-    DeflSub => ["limit {0} µm · stickout {1} mm", "limite {0} µm · sporgenza {1} mm", "Grenze {0} µm · Auskraglänge {1} mm", "limite {0} µm · porte-à-faux {1} mm", "límite {0} µm · voladizo {1} mm", "限值 {0} µm · 悬伸 {1} mm", "上限 {0} µm · 突き出し {1} mm", "한계 {0} µm · 돌출 {1} mm"],
+    DeflSub => ["limit {0} · stickout {1}", "limite {0} · sporgenza {1}", "Grenze {0} · Auskraglänge {1}", "limite {0} · porte-à-faux {1}", "límite {0} · voladizo {1}", "限值 {0} · 悬伸 {1}", "上限 {0} · 突き出し {1}", "한계 {0} · 돌출 {1}"],
     RampPlunge => ["Ramp and plunge", "Rampa e tuffo", "Rampe und Eintauchen", "Rampe et plongée", "Rampa y penetración", "斜坡与垂直下刀", "ランプと突っ込み", "램핑과 플런지"],
-    RampSub => ["plunge F{0} · helix Ø {1}–{2} mm", "tuffo F{0} · elica Ø {1}–{2} mm", "Eintauchen F{0} · Helix Ø {1}–{2} mm", "plongée F{0} · hélice Ø {1}–{2} mm", "penetración F{0} · hélice Ø {1}–{2} mm", "垂直下刀 F{0} · 螺旋 Ø {1}–{2} mm", "突っ込み F{0} · ヘリカル Ø {1}–{2} mm", "플런지 F{0} · 헬리컬 Ø {1}–{2} mm"],
+    RampSub => ["plunge F{0} · helix Ø {1}–{2}", "tuffo F{0} · elica Ø {1}–{2}", "Eintauchen F{0} · Helix Ø {1}–{2}", "plongée F{0} · hélice Ø {1}–{2}", "penetración F{0} · hélice Ø {1}–{2}", "垂直下刀 F{0} · 螺旋 Ø {1}–{2}", "突っ込み F{0} · ヘリカル Ø {1}–{2}", "플런지 F{0} · 헬리컬 Ø {1}–{2}"],
     Entry => ["Entry", "Entrata", "Einfahren", "Entrée", "Entrada", "切入", "進入", "진입"],
     EntryValue => ["from air", "in aria", "von außen", "hors matière", "desde fuera", "从外部切入", "材料外から", "소재 밖에서"],
     EntrySub => ["enter from the side on an arc, never plunge", "entra di lato con un arco, mai in tuffo", "seitlich im Bogen einfahren, nie eintauchen", "entrer par le côté en arc, jamais en plongée", "entra por el lateral en arco, nunca en penetración", "从侧面圆弧切入，切勿垂直下刀", "側面から円弧で進入し、突っ込まない", "측면에서 원호로 진입, 플런지 금지"],
     Scallop => ["Scallop between passes", "Cresta tra passate", "Rautiefe zwischen Bahnen", "Hauteur de crête entre passes", "Altura de cresta entre pasadas", "行间残留高度", "パス間のカスプ高さ", "패스 간 커스프 높이"],
-    ScallopSub => ["with stepover ae {0} mm", "con passo ae {0} mm", "bei Zustellung ae {0} mm", "avec pas ae {0} mm", "con paso ae {0} mm", "行距 ae {0} mm", "ピック ae {0} mm", "스텝오버 ae {0} mm"],
+    ScallopSub => ["with stepover ae {0}", "con passo ae {0}", "bei Zustellung ae {0}", "avec pas ae {0}", "con paso ae {0}", "行距 ae {0}", "ピック ae {0}", "스텝오버 ae {0}"],
     FeedCusp => ["Feed cusp (wall)", "Cresta da avanzamento (fianco)", "Vorschubrauheit (Wand)", "Crête d'avance (flanc)", "Cresta de avance (pared)", "进给残留（侧壁）", "送りマーク（側面）", "이송 자국(측벽)"],
-    RaSub => ["theoretical Ra ≈ {0} µm", "Ra teorica ≈ {0} µm", "theoretisches Ra ≈ {0} µm", "Ra théorique ≈ {0} µm", "Ra teórica ≈ {0} µm", "理论 Ra ≈ {0} µm", "理論 Ra ≈ {0} µm", "이론 Ra ≈ {0} µm"],
+    RaSub => ["theoretical Ra ≈ {0}", "Ra teorica ≈ {0}", "theoretisches Ra ≈ {0}", "Ra théorique ≈ {0}", "Ra teórica ≈ {0}", "理论 Ra ≈ {0}", "理論 Ra ≈ {0}", "이론 Ra ≈ {0}"],
 
     Curve => ["Curve", "Curva", "Kurve", "Courbe", "Curva", "曲线", "曲線", "곡선"],
     Vary => ["Vary:", "Fai variare:", "Variieren:", "Faire varier :", "Variar:", "变量：", "変化させる：", "변수:"],
     CurveNote => ["Everything else stays fixed. Marked points are where power, deflection or max feed hold the cut back.", "Tutto il resto resta fisso. I tratti marcati sono quelli in cui potenza, flessione o avanzamento massimo frenano il taglio.", "Alles andere bleibt gleich. Markierte Punkte zeigen, wo Leistung, Durchbiegung oder max. Vorschub den Schnitt bremsen.", "Tout le reste est fixe. Les points marqués indiquent où la puissance, la flexion ou l'avance max. freinent la coupe.", "Todo lo demás queda fijo. Los puntos marcados indican dónde la potencia, la deflexión o el avance máximo frenan el corte.", "其余参数保持不变。标记点表示功率、挠度或最大进给限制了切削。", "他の条件は固定です。マーク付きの点は、出力・たわみ・最大送りで切削が抑えられている所です。", "나머지는 고정됩니다. 표시된 점은 출력, 처짐 또는 최대 이송이 절삭을 제한하는 구간입니다."],
     XRadial => ["ae as % of Ø", "ae in % del Ø", "ae in % von Ø", "ae en % de Ø", "ae en % del Ø", "ae 占 Ø 的 %", "ae（Øに対する%）", "ae (Ø 대비 %)"],
-    MrrTitle => ["Material removal rate MRR (cm³/min)", "Asportazione MRR (cm³/min)", "Zeitspanvolumen Q (cm³/min)", "Débit de copeaux Q (cm³/min)", "Tasa de arranque MRR (cm³/min)", "材料去除率 MRR（cm³/min）", "切削体積 MRR（cm³/min）", "소재 제거율 MRR (cm³/min)"],
-    PowerTitle => ["Spindle power (kW)", "Potenza al mandrino (kW)", "Spindelleistung (kW)", "Puissance broche (kW)", "Potencia del husillo (kW)", "主轴功率（kW）", "主軸出力（kW）", "주축 출력 (kW)"],
+    MrrTitle => ["Material removal rate MRR ({0})", "Asportazione MRR ({0})", "Zeitspanvolumen Q ({0})", "Débit de copeaux Q ({0})", "Tasa de arranque MRR ({0})", "材料去除率 MRR（{0}）", "切削体積 MRR（{0}）", "소재 제거율 MRR ({0})"],
+    PowerTitle => ["Spindle power ({0})", "Potenza al mandrino ({0})", "Spindelleistung ({0})", "Puissance broche ({0})", "Potencia del husillo ({0})", "主轴功率（{0}）", "主軸出力（{0}）", "주축 출력 ({0})"],
     LegLimited => ["held back by a limit", "frenato da un limite", "durch Grenze gebremst", "freiné par une limite", "frenado por un límite", "受限制", "制限あり", "제한됨"],
     LegCurrent => ["current", "attuale", "aktuell", "actuel", "actual", "当前", "現在", "현재"],
     LegAvailable => ["available", "disponibile", "verfügbar", "disponible", "disponible", "可用", "使用可能", "사용 가능"],
@@ -290,13 +306,14 @@ strings! {
     Compare => ["Comparison", "Confronto", "Vergleich", "Comparaison", "Comparación", "比较", "比較", "비교"],
     CompareNote => ["The four strategies applied to the current tool, plus saved setups with \"compare\" ticked.", "Le quattro strategie applicate all'utensile attuale, più le impostazioni salvate con la spunta \"confronta\".", "Die vier Strategien mit dem aktuellen Werkzeug, dazu gespeicherte Einstellungen mit Vergleichs-Haken.", "Les quatre stratégies appliquées à l'outil actuel, plus les réglages enregistrés cochés pour la comparaison.", "Las cuatro estrategias aplicadas a la herramienta actual, más las configuraciones guardadas marcadas para comparar.", "当前刀具的四种策略，以及勾选了比较的已保存设置。", "現在の工具に4つの戦略を当てはめた結果と、比較にチェックした保存済み設定。", "현재 공구에 네 가지 전략을 적용한 결과와 비교에 체크한 저장된 설정."],
     CurrentCut => ["Current cut", "Passata attuale", "Aktueller Schnitt", "Passe actuelle", "Pasada actual", "当前切削", "現在の条件", "현재 절삭"],
-    BarPower => ["Spindle power kW (tick = available)", "Potenza mandrino kW (tacca = disponibile)", "Spindelleistung kW (Strich = verfügbar)", "Puissance broche kW (repère = disponible)", "Potencia del husillo kW (marca = disponible)", "主轴功率 kW（刻线 = 可用）", "主軸出力 kW（目盛 = 使用可能）", "주축 출력 kW (눈금 = 사용 가능)"],
+    BarPower => ["Spindle power {0} (tick = available)", "Potenza mandrino {0} (tacca = disponibile)", "Spindelleistung {0} (Strich = verfügbar)", "Puissance broche {0} (repère = disponible)", "Potencia del husillo {0} (marca = disponible)", "主轴功率 {0}（刻线 = 可用）", "主軸出力 {0}（目盛 = 使用可能）", "주축 출력 {0} (눈금 = 사용 가능)"],
 
     StepVcBase => ["Base Vc from table ({0})", "Vc base da tabella ({0})", "Basis-Vc aus Tabelle ({0})", "Vc de base (table, {0})", "Vc base de tabla ({0})", "表格基准 Vc（{0}）", "表の基準Vc（{0}）", "표 기준 Vc ({0})"],
     StepDrilling => ["Drilling", "Foratura", "Bohren", "Perçage", "Taladrado", "钻削", "穴あけ", "드릴링"],
     StepCoating => ["Coating {0}", "Rivestimento {0}", "Beschichtung {0}", "Revêtement {0}", "Recubrimiento {0}", "涂层 {0}", "コーティング {0}", "코팅 {0}"],
     StepFullSlot => ["Full slot (more heat)", "Cava piena (più calore)", "Volle Nut (mehr Wärme)", "Rainure pleine (plus de chaleur)", "Ranura completa (más calor)", "全槽（发热更多）", "溝加工（発熱大）", "풀 슬롯(발열 큼)"],
-    StepEngCool => ["Radial engagement {0}% (less heat)", "Impegno radiale {0}% (meno calore)", "Radiale Zustellung {0} % (weniger Wärme)", "Engagement radial {0} % (moins de chaleur)", "Ancho radial {0} % (menos calor)", "径向切宽 {0}%（发热更少）", "径方向切込み {0}%（発熱小）", "반경방향 절입 {0}% (발열 적음)"],
+    StepEngCool => ["HSM, radial engagement {0}% (less heat)", "HSM, impegno radiale {0}% (meno calore)", "HSC, radiale Zustellung {0} % (weniger Wärme)", "UGV, engagement radial {0} % (moins de chaleur)", "HSM, ancho radial {0} % (menos calor)", "HSM，径向切宽 {0}%（发热更少）", "HSM、径方向切込み {0}%（発熱小）", "HSM, 반경방향 절입 {0}% (발열 적음)"],
+    StepHardness => ["Hardness {0} instead of {1}", "Durezza {0} invece di {1}", "Härte {0} statt {1}", "Dureté {0} au lieu de {1}", "Dureza {0} en lugar de {1}", "硬度 {0}（名义 {1}）", "硬さ {0}（公称 {1}）", "경도 {0} (공칭 {1})"],
     StepEng => ["Radial engagement {0}%", "Impegno radiale {0}%", "Radiale Zustellung {0} %", "Engagement radial {0} %", "Ancho radial {0} %", "径向切宽 {0}%", "径方向切込み {0}%", "반경방향 절입 {0}%"],
     StepLife => ["Life / productivity adjustment", "Regolazione durata/produttività", "Einstellung Standzeit/Produktivität", "Réglage durée de vie/productivité", "Ajuste vida/productividad", "寿命/效率调整", "寿命・生産性の調整", "수명/생산성 조정"],
     StepVcTarget => ["Target Vc", "Vc obiettivo", "Ziel-Vc", "Vc cible", "Vc objetivo", "目标 Vc", "目標Vc", "목표 Vc"],
@@ -312,6 +329,8 @@ strings! {
     StepCapped => ["Capped at ×5 for safety", "Limitato a ×5 per sicurezza", "Zur Sicherheit auf ×5 begrenzt", "Plafonné à ×5 par sécurité", "Limitado a ×5 por seguridad", "为安全限制在 ×5", "安全のため×5に制限", "안전을 위해 ×5로 제한"],
     StepReduction => ["Reduction for {0}", "Riduzione per {0}", "Reduzierung wegen {0}", "Réduction pour {0}", "Reducción por {0}", "因{0}降低", "{0}による低減", "{0}로 인한 감소"],
     StepFzProg => ["Programmed fz", "fz programmato", "Programmiertes fz", "fz programmé", "fz programado", "编程 fz", "指令 fz", "지령 fz"],
+    StepManualSpeed => ["Speed set by hand", "Velocità impostata a mano", "Geschwindigkeit von Hand", "Vitesse saisie à la main", "Velocidad fijada a mano", "手动设定的速度", "手動設定の速度", "수동 설정 속도"],
+    StepManualFeed => ["Feed set by hand", "Avanzamento impostato a mano", "Vorschub von Hand", "Avance saisie à la main", "Avance fijado a mano", "手动设定的进给", "手動設定の送り", "수동 설정 이송"],
     StepFnBase => ["Base feed per rev {0} × Ø", "Avanzamento al giro base {0} × Ø", "Basis-Vorschub pro Umdrehung {0} × Ø", "Avance par tour de base {0} × Ø", "Avance por vuelta base {0} × Ø", "基准每转进给 {0} × Ø", "基準回転送り {0} × Ø", "기준 회전당 이송 {0} × Ø"],
     StepFnFactors => ["Tool · rigidity · adjustment", "Utensile · rigidità · regolazione", "Werkzeug · Steifigkeit · Einstellung", "Outil · rigidité · réglage", "Herramienta · rigidez · ajuste", "刀具 · 刚性 · 调整", "工具 · 剛性 · 調整", "공구 · 강성 · 조정"],
     StepFnTarget => ["Target f", "f obiettivo", "Ziel-f", "f cible", "f objetivo", "目标 f", "目標 f", "목표 f"],
@@ -323,24 +342,24 @@ strings! {
     WDiaT => ["Diamond does not suit ferrous metals", "Il diamante non va sui ferrosi", "Diamant ist für Eisenwerkstoffe ungeeignet", "Le diamant ne convient pas aux ferreux", "El diamante no sirve para ferrosos", "金刚石不适合黑色金属", "ダイヤモンドは鉄系に不適", "다이아몬드는 철계 소재에 부적합"],
     WDiaX => ["Carbon diffuses into iron and the edge wears out within a few metres.", "Il carbonio diffonde nel ferro e il tagliente si consuma in pochi metri.", "Kohlenstoff diffundiert ins Eisen, die Schneide verschleißt nach wenigen Metern.", "Le carbone diffuse dans le fer et l'arête s'use en quelques mètres.", "El carbono se difunde en el hierro y el filo se gasta en pocos metros.", "碳会扩散到铁中，切削刃几米内就会磨损。", "炭素が鉄に拡散し、刃先は数メートルで摩耗します。", "탄소가 철로 확산되어 날이 몇 미터 만에 마모됩니다."],
     WPowT => ["Not enough power", "Potenza insufficiente", "Leistung reicht nicht", "Puissance insuffisante", "Potencia insuficiente", "功率不足", "出力不足", "출력 부족"],
-    WPowX => ["Needs {0} kW at the spindle, {1} kW available at {2} rpm.", "Servono {0} kW al mandrino, disponibili {1} kW a {2} giri.", "Benötigt {0} kW an der Spindel, verfügbar {1} kW bei {2} 1/min.", "Il faut {0} kW à la broche, {1} kW disponibles à {2} tr/min.", "Se necesitan {0} kW en el husillo, hay {1} kW a {2} rpm.", "主轴需要 {0} kW，{2} rpm 时仅有 {1} kW。", "主軸に {0} kW 必要ですが、{2} rpm で使用可能なのは {1} kW です。", "주축에 {0} kW가 필요하지만 {2} rpm에서 {1} kW만 사용 가능합니다."],
+    WPowX => ["Needs {0} at the spindle, {1} available at {2} rpm.", "Servono {0} al mandrino, disponibili {1} a {2} giri.", "Benötigt {0} an der Spindel, verfügbar {1} bei {2} 1/min.", "Il faut {0} à la broche, {1} disponibles à {2} tr/min.", "Se necesitan {0} en el husillo, hay {1} a {2} rpm.", "主轴需要 {0}，{2} rpm 时仅有 {1}。", "主軸に {0} 必要ですが、{2} rpm で使用可能なのは {1} です。", "주축에 {0}가 필요하지만 {2} rpm에서 {1}만 사용 가능합니다."],
     WDeepHoleT => ["Deep hole ({0}×Ø)", "Foro profondo ({0}×Ø)", "Tiefe Bohrung ({0}×Ø)", "Trou profond ({0}×Ø)", "Agujero profundo ({0}×Ø)", "深孔（{0}×Ø）", "深穴（{0}×Ø）", "깊은 구멍 ({0}×Ø)"],
-    WDeepHoleX => ["Use the G83 cycle with chip clearing every {0} mm.", "Usa il ciclo G83 con scarico truciolo ogni {0} mm.", "G83-Zyklus mit Entspanen alle {0} mm verwenden.", "Utilisez le cycle G83 avec débourrage tous les {0} mm.", "Usa el ciclo G83 con descarga de viruta cada {0} mm.", "使用 G83 循环，每 {0} mm 退刀排屑。", "G83サイクルで {0} mm ごとに切りくずを排出してください。", "G83 사이클로 {0} mm마다 칩을 배출하세요."],
+    WDeepHoleX => ["Use the G83 cycle with chip clearing every {0}.", "Usa il ciclo G83 con scarico truciolo ogni {0}.", "G83-Zyklus mit Entspanen alle {0} verwenden.", "Utilisez le cycle G83 avec débourrage tous les {0}.", "Usa el ciclo G83 con descarga de viruta cada {0}.", "使用 G83 循环，每 {0} 退刀排屑。", "G83サイクルで {0} ごとに切りくずを排出してください。", "G83 사이클로 {0}마다 칩을 배출하세요."],
     WOver8T => ["Deeper than 8×Ø", "Oltre 8×Ø", "Tiefer als 8×Ø", "Plus de 8×Ø", "Más de 8×Ø", "超过 8×Ø", "8×Ø超", "8×Ø 초과"],
     WOver8X => ["Drill a short pilot hole with a stiff drill first, and cut feed by 20–30% at depth.", "Fai prima un foro pilota corto con una punta rigida e riduci l'avanzamento del 20–30% in profondità.", "Zuerst kurz mit einem steifen Bohrer pilotbohren und in der Tiefe den Vorschub um 20–30 % senken.", "Faites d'abord un avant-trou court avec un foret rigide et réduisez l'avance de 20 à 30 % en profondeur.", "Haz primero un agujero piloto corto con una broca rígida y reduce el avance un 20–30 % en profundidad.", "先用刚性好的钻头钻短引导孔，深处进给降低 20–30%。", "まず剛性の高いドリルで短い下穴をあけ、深い所では送りを20〜30%下げてください。", "먼저 강성 높은 드릴로 짧은 파일럿 구멍을 내고, 깊은 곳에서는 이송을 20–30% 줄이세요."],
     WVbitT => ["Deeper than the cone", "Profondità oltre il cono", "Tiefer als der Kegel", "Plus profond que le cône", "Más profundo que el cono", "超出锥形部分", "円錐部を超える深さ", "원뿔부보다 깊음"],
-    WVbitX => ["At {0} mm the V is wider than the tool diameter.", "A {0} mm la V supera il Ø dell'utensile.", "Bei {0} mm ist das V breiter als der Werkzeug-Ø.", "À {0} mm, le V dépasse le Ø de l'outil.", "A {0} mm la V supera el Ø de la herramienta.", "在 {0} mm 深度时 V 形宽度超过刀具直径。", "{0} mm ではV幅が工具径を超えます。", "{0} mm에서 V 폭이 공구 직경을 넘습니다."],
-    WThinT => ["Chip too thin ({0} mm)", "Truciolo troppo sottile ({0} mm)", "Span zu dünn ({0} mm)", "Copeau trop fin ({0} mm)", "Viruta demasiado fina ({0} mm)", "切屑过薄（{0} mm）", "切りくずが薄すぎます（{0} mm）", "칩이 너무 얇음 ({0} mm)"],
+    WVbitX => ["At {0} the V is wider than the tool diameter.", "A {0} la V supera il Ø dell'utensile.", "Bei {0} ist das V breiter als der Werkzeug-Ø.", "À {0}, le V dépasse le Ø de l'outil.", "A {0} la V supera el Ø de la herramienta.", "在 {0} 深度时 V 形宽度超过刀具直径。", "{0} ではV幅が工具径を超えます。", "{0}에서 V 폭이 공구 직경을 넘습니다."],
+    WThinT => ["Chip too thin ({0})", "Truciolo troppo sottile ({0})", "Span zu dünn ({0})", "Copeau trop fin ({0})", "Viruta demasiado fina ({0})", "切屑过薄（{0}）", "切りくずが薄すぎます（{0}）", "칩이 너무 얇음 ({0})"],
     WThinMetalX => ["The tool rubs and work-hardens the material instead of cutting. Raise the feed or lower the speed.", "L'utensile sfrega e incrudisce invece di tagliare. Aumenta l'avanzamento o riduci i giri.", "Das Werkzeug reibt und verfestigt den Werkstoff, statt zu schneiden. Vorschub erhöhen oder Drehzahl senken.", "L'outil frotte et écrouit la matière au lieu de couper. Augmentez l'avance ou baissez la vitesse.", "La herramienta roza y endurece el material en lugar de cortar. Sube el avance o baja la velocidad.", "刀具在摩擦并使材料加工硬化，而不是切削。请提高进给或降低转速。", "工具が削らずにこすれ、加工硬化を起こします。送りを上げるか回転数を下げてください。", "공구가 절삭하지 못하고 문질러 가공경화를 일으킵니다. 이송을 높이거나 회전수를 낮추세요."],
     WThinPlasticX => ["The plastic melts and sticks to the edge. Raise the feed or lower the speed.", "La plastica fonde e si impasta sul tagliente. Aumenta l'avanzamento o riduci i giri.", "Der Kunststoff schmilzt und klebt an der Schneide. Vorschub erhöhen oder Drehzahl senken.", "Le plastique fond et colle à l'arête. Augmentez l'avance ou baissez la vitesse.", "El plástico se funde y se pega al filo. Sube el avance o baja la velocidad.", "塑料熔化并粘在刃口上。请提高进给或降低转速。", "樹脂が溶けて刃先に付着します。送りを上げるか回転数を下げてください。", "플라스틱이 녹아 날에 달라붙습니다. 이송을 높이거나 회전수를 낮추세요."],
     WDeflHalfT => ["Deflection halves the feed", "La flessione dimezza l'avanzamento", "Durchbiegung halbiert den Vorschub", "La flexion divise l'avance par deux", "La deflexión reduce el avance a la mitad", "挠度使进给减半", "たわみで送りが半減", "처짐으로 이송이 절반으로 감소"],
     WDeflHalfX => ["Shorten the stickout, reduce ap/ae or use a larger tool.", "Accorcia la sporgenza, riduci ap/ae o usa un utensile più grosso.", "Auskraglänge verkürzen, ap/ae verringern oder ein größeres Werkzeug nehmen.", "Réduisez le porte-à-faux, diminuez ap/ae ou prenez un outil plus gros.", "Acorta el voladizo, reduce ap/ae o usa una herramienta más grande.", "缩短悬伸、减小 ap/ae 或换用更大的刀具。", "突き出しを短くするか、ap/aeを減らすか、太い工具を使ってください。", "돌출을 줄이거나 ap/ae를 줄이거나 더 큰 공구를 쓰세요."],
     WPowHalfT => ["Power at the limit", "Potenza al limite", "Leistung am Limit", "Puissance à la limite", "Potencia al límite", "功率已达上限", "出力が限界", "출력 한계"],
     WPowHalfX => ["Better to reduce ap or ae and keep a thicker chip.", "Conviene ridurre ap o ae e tenere un truciolo più spesso.", "Besser ap oder ae verringern und die Spandicke halten.", "Mieux vaut réduire ap ou ae et garder un copeau plus épais.", "Conviene reducir ap o ae y mantener una viruta más gruesa.", "建议减小 ap 或 ae，保持较厚的切屑。", "apかaeを減らし、切りくずを厚めに保つ方が有利です。", "ap 또는 ae를 줄이고 칩을 두껍게 유지하는 것이 좋습니다."],
-    WDeflT => ["Deflection {0} µm", "Flessione {0} µm", "Durchbiegung {0} µm", "Flexion {0} µm", "Deflexión {0} µm", "挠度 {0} µm", "たわみ {0} µm", "처짐 {0} µm"],
-    WDeflX => ["Above the {0} µm limit: expect chatter and parts out of tolerance.", "Oltre il limite di {0} µm: aspettati vibrazioni e quote fuori tolleranza.", "Über der Grenze von {0} µm: Rattern und Maße außer Toleranz zu erwarten.", "Au-delà de la limite de {0} µm : vibrations et cotes hors tolérance probables.", "Supera el límite de {0} µm: espera vibraciones y cotas fuera de tolerancia.", "超过 {0} µm 限值：可能出现振刀和尺寸超差。", "上限 {0} µm 超過：びびりや寸法外れが起こりやすくなります。", "한계 {0} µm 초과: 채터와 공차 이탈이 예상됩니다."],
+    WDeflT => ["Deflection {0}", "Flessione {0}", "Durchbiegung {0}", "Flexion {0}", "Deflexión {0}", "挠度 {0}", "たわみ {0}", "처짐 {0}"],
+    WDeflX => ["Above the {0} limit: expect chatter and parts out of tolerance.", "Oltre il limite di {0}: aspettati vibrazioni e quote fuori tolleranza.", "Über der Grenze von {0}: Rattern und Maße außer Toleranz zu erwarten.", "Au-delà de la limite de {0} : vibrations et cotes hors tolérance probables.", "Supera el límite de {0}: espera vibraciones y cotas fuera de tolerancia.", "超过 {0} 限值：可能出现振刀和尺寸超差。", "上限 {0} 超過：びびりや寸法外れが起こりやすくなります。", "한계 {0} 초과: 채터와 공차 이탈이 예상됩니다."],
     WApFluteT => ["ap beyond the flute length", "ap oltre la lunghezza tagliente", "ap größer als die Schneidenlänge", "ap au-delà de la longueur de coupe", "ap mayor que la longitud de corte", "ap 超过刃长", "apが刃長を超えています", "ap가 날 길이를 초과"],
-    WApFluteX => ["With {0} mm of flute the shank would rub on the part.", "Con {0} mm di tagliente il gambo strisciarebbe sul pezzo.", "Bei {0} mm Schneidenlänge reibt der Schaft am Werkstück.", "Avec {0} mm de coupe, la queue frotterait sur la pièce.", "Con {0} mm de corte el mango rozaría la pieza.", "刃长只有 {0} mm，刀柄会摩擦工件。", "刃長 {0} mm ではシャンクがワークに擦れます。", "날 길이가 {0} mm라 생크가 공작물에 닿습니다."],
+    WApFluteX => ["With {0} of flute the shank would rub on the part.", "Con {0} di tagliente il gambo strisciarebbe sul pezzo.", "Bei {0} Schneidenlänge reibt der Schaft am Werkstück.", "Avec {0} de coupe, la queue frotterait sur la pièce.", "Con {0} de corte el mango rozaría la pieza.", "刃长只有 {0}，刀柄会摩擦工件。", "刃長 {0} ではシャンクがワークに擦れます。", "날 길이가 {0}라 생크가 공작물에 닿습니다."],
     WStickT => ["Stickout {0}×Ø", "Sporgenza {0}×Ø", "Auskraglänge {0}×Ø", "Porte-à-faux {0}×Ø", "Voladizo {0}×Ø", "悬伸 {0}×Ø", "突き出し {0}×Ø", "돌출 {0}×Ø"],
     WStickX => ["Beyond 4×Ø stiffness drops with the cube of the length.", "Oltre 4×Ø la rigidità crolla con il cubo della lunghezza.", "Über 4×Ø sinkt die Steifigkeit mit der dritten Potenz der Länge.", "Au-delà de 4×Ø, la rigidité chute avec le cube de la longueur.", "Más allá de 4×Ø la rigidez cae con el cubo de la longitud.", "超过 4×Ø 后，刚性随长度的三次方下降。", "4×Øを超えると剛性は長さの3乗で低下します。", "4×Ø를 넘으면 강성이 길이의 세제곱으로 떨어집니다."],
     WStickShortT => ["Stickout shorter than the flute length", "Sporgenza minore della lunghezza tagliente", "Auskraglänge kürzer als die Schneidenlänge", "Porte-à-faux plus court que la longueur de coupe", "Voladizo menor que la longitud de corte", "悬伸短于刃长", "突き出しが刃長より短い", "돌출이 날 길이보다 짧음"],
@@ -350,9 +369,9 @@ strings! {
     WDeepSlotT => ["Slot deeper than 1×Ø", "Cava profonda oltre 1×Ø", "Nut tiefer als 1×Ø", "Rainure plus profonde que 1×Ø", "Ranura más profunda que 1×Ø", "槽深超过 1×Ø", "1×Øを超える深溝", "1×Ø보다 깊은 슬롯"],
     WDeepSlotX => ["Chip evacuation is hard. Use air or coolant, or a trochoidal strategy.", "Evacuazione truciolo difficile. Usa aria o refrigerante, oppure una strategia trocoidale.", "Spanabfuhr schwierig. Luft oder Kühlmittel verwenden oder trochoidal fräsen.", "Évacuation des copeaux difficile. Utilisez air ou lubrifiant, ou une stratégie trochoïdale.", "La evacuación de viruta es difícil. Usa aire o refrigerante, o una estrategia trocoidal.", "排屑困难。请使用吹气或冷却液，或改用摆线策略。", "切りくず排出が困難です。エアかクーラント、またはトロコイド加工を使ってください。", "칩 배출이 어렵습니다. 에어나 절삭유, 또는 트로코이달 전략을 쓰세요."],
     WCapT => ["Spindle limits the speed", "Il mandrino limita i giri", "Spindel begrenzt die Drehzahl", "La broche limite la vitesse", "El husillo limita la velocidad", "主轴转速受限", "主軸回転数が上限", "주축 회전수 제한"],
-    WCapX => ["Actual Vc {0} m/min ({1}% of recommended). Chip load stays correct; you can raise ae instead of speed.", "Vc reale {0} m/min ({1}% del consigliato). Il truciolo resta corretto; puoi alzare ae invece della velocità.", "Tatsächliche Vc {0} m/min ({1} % der Empfehlung). Die Spandicke bleibt richtig; erhöhe ae statt der Drehzahl.", "Vc réelle {0} m/min ({1} % de la recommandée). Le copeau reste correct ; augmentez ae plutôt que la vitesse.", "Vc real {0} m/min ({1} % de la recomendada). La viruta sigue siendo correcta; puedes subir ae en lugar de la velocidad.", "实际 Vc {0} m/min（推荐值的 {1}%）。切屑厚度仍然正确，可以加大 ae 来代替提速。", "実Vc {0} m/min（推奨の{1}%）。切りくず厚さは適正なので、回転の代わりにaeを増やせます。", "실제 Vc {0} m/min (권장의 {1}%). 칩 두께는 적정하므로 속도 대신 ae를 늘릴 수 있습니다."],
+    WCapX => ["Actual Vc {0} ({1}% of recommended). Chip load stays correct; you can raise ae instead of speed.", "Vc reale {0} ({1}% del consigliato). Il truciolo resta corretto; puoi alzare ae invece della velocità.", "Tatsächliche Vc {0} ({1} % der Empfehlung). Die Spandicke bleibt richtig; erhöhe ae statt der Drehzahl.", "Vc réelle {0} ({1} % de la recommandée). Le copeau reste correct ; augmentez ae plutôt que la vitesse.", "Vc real {0} ({1} % de la recomendada). La viruta sigue siendo correcta; puedes subir ae en lugar de la velocidad.", "实际 Vc {0}（推荐值的 {1}%）。切屑厚度仍然正确，可以加大 ae 来代替提速。", "実Vc {0}（推奨の{1}%）。切りくず厚さは適正なので、回転の代わりにaeを増やせます。", "실제 Vc {0} (권장의 {1}%). 칩 두께는 적정하므로 속도 대신 ae를 늘릴 수 있습니다."],
     WMinT => ["Minimum speed too high", "Giri minimi troppo alti", "Mindestdrehzahl zu hoch", "Vitesse minimale trop élevée", "Velocidad mínima demasiado alta", "最低转速过高", "最低回転数が高すぎます", "최저 회전수가 너무 높음"],
-    WMinX => ["Vc {0} m/min against {1} recommended: the edge may burn.", "Vc {0} m/min contro {1} consigliati: rischio di bruciare il tagliente.", "Vc {0} m/min statt {1} empfohlen: Die Schneide kann verbrennen.", "Vc {0} m/min contre {1} recommandés : l'arête risque de brûler.", "Vc {0} m/min frente a {1} recomendados: el filo puede quemarse.", "Vc {0} m/min，推荐 {1}：刃口可能烧损。", "Vc {0} m/min（推奨 {1}）：刃先が焼ける恐れがあります。", "Vc {0} m/min (권장 {1}): 날이 탈 수 있습니다."],
+    WMinX => ["Vc {0} against {1} recommended: the edge may burn.", "Vc {0} contro {1} consigliati: rischio di bruciare il tagliente.", "Vc {0} statt {1} empfohlen: Die Schneide kann verbrennen.", "Vc {0} contre {1} recommandés : l'arête risque de brûler.", "Vc {0} frente a {1} recomendados: el filo puede quemarse.", "Vc {0}，推荐 {1}：刃口可能烧损。", "Vc {0}（推奨 {1}）：刃先が焼ける恐れがあります。", "Vc {0} (권장 {1}): 날이 탈 수 있습니다."],
 }
 
 /// Material display names in every language.
@@ -638,6 +657,47 @@ impl Lang {
         })
     }
 
+    /// Number with its unit, e.g. "12.5 mm".
+    fn qty(self, v: f64, dec: usize, unit: &str) -> String {
+        format!("{} {unit}", self.num(v, dec))
+    }
+    /// Length given in mm, shown in the chosen units.
+    pub fn len(self, u: Units, mm: f64, dec: usize) -> String {
+        self.qty(u.len(mm), u.len_dec(dec), u.len_unit())
+    }
+    /// Small length given in µm (deflection, scallop).
+    pub fn micro(self, u: Units, um: f64, dec: usize) -> String {
+        self.qty(u.micro(um), u.micro_dec(dec), u.micro_unit())
+    }
+    pub fn speed(self, u: Units, m_min: f64) -> String {
+        self.qty(u.speed(m_min), 0, u.speed_unit())
+    }
+    pub fn feed(self, u: Units, mm_min: f64) -> String {
+        self.qty(u.feed(mm_min), u.feed_dec(), u.feed_unit())
+    }
+    pub fn per_rev(self, u: Units, mm: f64, dec: usize) -> String {
+        self.qty(u.len(mm), u.len_dec(dec), self.per_rev_unit(u))
+    }
+    pub fn per_rev_unit(self, u: Units) -> &'static str {
+        if u.inch() {
+            "in/rev"
+        } else {
+            self.t(K::UnitMmRev)
+        }
+    }
+    pub fn power(self, u: Units, kw: f64) -> String {
+        self.qty(u.power(kw), 2, u.power_unit())
+    }
+    pub fn mrr(self, u: Units, cm3_min: f64) -> String {
+        self.qty(u.mrr(cm3_min), if u.inch() { 2 } else { 1 }, u.mrr_unit())
+    }
+    pub fn force(self, u: Units, n: f64) -> String {
+        self.qty(u.force(n), 0, u.force_unit())
+    }
+    pub fn rough(self, u: Units, um: f64) -> String {
+        self.qty(u.rough(um), if u.inch() { 0 } else { 2 }, u.rough_unit())
+    }
+
     pub fn tool_material(self, m: ToolMaterial) -> &'static str {
         self.t(match m {
             ToolMaterial::Carbide => K::MatCarbide,
@@ -702,17 +762,24 @@ impl Lang {
     }
 
     /// Label and value text of one breakdown row.
-    pub fn row(self, r: &Row) -> (String, String) {
+    pub fn row(self, r: &Row, u: Units) -> (String, String) {
         let n = |v: f64, d: usize| self.num(v, d);
         let label = match r.step {
             Step::VcBase(m) => self.f(K::StepVcBase, &[self.tool_material_short(m)]),
             Step::Drilling => self.t(K::StepDrilling).into(),
             Step::Coating(c) => self.f(K::StepCoating, &[self.coating(c)]),
-            Step::FullSlot => self.t(K::StepFullSlot).into(),
-            Step::Engagement { pct, cooler } => self.f(
-                if cooler { K::StepEngCool } else { K::StepEng },
-                &[&n(pct, 0)],
+            Step::Hardness {
+                value,
+                nominal,
+                hrc,
+            } => self.f(
+                K::StepHardness,
+                &[&hardness(self, value, hrc), &hardness(self, nominal, hrc)],
             ),
+            Step::FullSlot => self.t(K::StepFullSlot).into(),
+            Step::Engagement { pct, hsm } => {
+                self.f(if hsm { K::StepEngCool } else { K::StepEng }, &[&n(pct, 0)])
+            }
             Step::LifeTweak => self.t(K::StepLife).into(),
             Step::VcTarget => self.t(K::StepVcTarget).into(),
             Step::EffectiveDiameter => self.t(K::StepEffD).into(),
@@ -729,7 +796,7 @@ impl Lang {
                     &[&n(tool, 2), &n(rigidity, 2), &n(tweak, 2)],
                 );
                 if slot {
-                    s.push_str(&self.f(K::StepSlotSuffix, &[&n(0.85, 2)]));
+                    s.push_str(&self.f(K::StepSlotSuffix, &[&n(SLOT_FZ, 2)]));
                 }
                 s
             }
@@ -740,15 +807,17 @@ impl Lang {
             Step::ThinningCapped => self.t(K::StepCapped).into(),
             Step::Reduction(l) => self.f(K::StepReduction, &[self.limiter(l)]),
             Step::FzProgrammed => self.t(K::StepFzProg).into(),
+            Step::ManualSpeed => self.t(K::StepManualSpeed).into(),
+            Step::ManualFeed => self.t(K::StepManualFeed).into(),
             Step::FnBase { cf } => self.f(K::StepFnBase, &[&n(cf, 4)]),
             Step::FnFactors => self.t(K::StepFnFactors).into(),
             Step::FnTarget => self.t(K::StepFnTarget).into(),
         };
         let value = match (r.step, r.unit) {
             (Step::ThinningCapped, _) => String::new(),
-            (_, Unit::MPerMin) => format!("{} m/min", n(r.value, r.decimals)),
-            (_, Unit::Mm) => format!("{} mm", n(r.value, r.decimals)),
-            (_, Unit::MmPerRev) => format!("{} {}", n(r.value, r.decimals), self.t(K::UnitMmRev)),
+            (_, Unit::MPerMin) => self.speed(u, r.value),
+            (_, Unit::Mm) => self.len(u, r.value, r.decimals),
+            (_, Unit::MmPerRev) => self.per_rev(u, r.value, r.decimals),
             (_, Unit::Factor) => format!("×{}", n(r.value, r.decimals)),
             (_, Unit::None) => n(r.value, r.decimals),
         };
@@ -756,7 +825,7 @@ impl Lang {
     }
 
     /// Title and body text of a warning.
-    pub fn warning(self, w: &Warning, material_id: &str) -> (String, String) {
+    pub fn warning(self, w: &Warning, material_id: &str, u: Units) -> (String, String) {
         let n = |v: f64, d: usize| self.num(v, d);
         let tx = |t: K, x: K| (self.t(t).to_string(), self.t(x).to_string());
         match w.msg {
@@ -772,16 +841,26 @@ impl Lang {
                 rpm,
             } => (
                 self.t(K::WPowT).into(),
-                self.f(K::WPowX, &[&n(need_kw, 2), &n(avail_kw, 2), &n(rpm, 0)]),
+                self.f(
+                    K::WPowX,
+                    &[
+                        &self.power(u, need_kw),
+                        &self.power(u, avail_kw),
+                        &n(rpm, 0),
+                    ],
+                ),
             ),
             Msg::DeepHole { ratio, peck } => (
                 self.f(K::WDeepHoleT, &[&n(ratio, 1)]),
-                self.f(K::WDeepHoleX, &[&n(peck, 1)]),
+                self.f(K::WDeepHoleX, &[&self.len(u, peck, 1)]),
             ),
             Msg::Over8D => tx(K::WOver8T, K::WOver8X),
-            Msg::VBitTooDeep { ap } => (self.t(K::WVbitT).into(), self.f(K::WVbitX, &[&n(ap, 2)])),
+            Msg::VBitTooDeep { ap } => (
+                self.t(K::WVbitT).into(),
+                self.f(K::WVbitX, &[&self.len(u, ap, 2)]),
+            ),
             Msg::ThinChip { chip, metal } => (
-                self.f(K::WThinT, &[&n(chip, 4)]),
+                self.f(K::WThinT, &[&self.len(u, chip, 4)]),
                 self.t(if metal {
                     K::WThinMetalX
                 } else {
@@ -792,12 +871,12 @@ impl Lang {
             Msg::DeflectionHalvesFeed => tx(K::WDeflHalfT, K::WDeflHalfX),
             Msg::PowerHalvesFeed => tx(K::WPowHalfT, K::WPowHalfX),
             Msg::Deflection { um, limit_um } => (
-                self.f(K::WDeflT, &[&n(um, 0)]),
-                self.f(K::WDeflX, &[&n(limit_um, 0)]),
+                self.f(K::WDeflT, &[&self.micro(u, um, 0)]),
+                self.f(K::WDeflX, &[&self.micro(u, limit_um, 0)]),
             ),
             Msg::ApOverFlute { flute } => (
                 self.t(K::WApFluteT).into(),
-                self.f(K::WApFluteX, &[&n(flute, 1)]),
+                self.f(K::WApFluteX, &[&self.len(u, flute, 1)]),
             ),
             Msg::LongStickout { ratio } => (
                 self.f(K::WStickT, &[&n(ratio, 1)]),
@@ -811,11 +890,11 @@ impl Lang {
             Msg::DeepSlot => tx(K::WDeepSlotT, K::WDeepSlotX),
             Msg::RpmCapped { vc, pct } => (
                 self.t(K::WCapT).into(),
-                self.f(K::WCapX, &[&n(vc, 0), &n(pct, 0)]),
+                self.f(K::WCapX, &[&self.speed(u, vc), &n(pct, 0)]),
             ),
             Msg::RpmMinTooHigh { vc, target } => (
                 self.t(K::WMinT).into(),
-                self.f(K::WMinX, &[&n(vc, 0), &n(target, 0)]),
+                self.f(K::WMinX, &[&self.speed(u, vc), &self.speed(u, target)]),
             ),
         }
     }
@@ -849,13 +928,16 @@ mod tests {
         s.machine.feed_max = 500.0;
         s.tool.stickout = 60.0;
         let o = compute(&s);
-        for lang in Lang::ALL {
+        for (lang, u) in Lang::ALL
+            .into_iter()
+            .flat_map(|l| [(l, Units::Metric), (l, Units::Inch)])
+        {
             for r in &o.why {
-                let (l, v) = lang.row(r);
+                let (l, v) = lang.row(r, u);
                 assert!(!l.contains('{') && !v.contains('{'), "{lang:?}: {l} / {v}");
             }
             for w in &o.warnings {
-                let (t, x) = lang.warning(w, &s.material_id);
+                let (t, x) = lang.warning(w, &s.material_id, u);
                 assert!(!t.contains('{') && !x.contains('{'), "{lang:?}: {t} / {x}");
             }
             for m in MATERIALS {

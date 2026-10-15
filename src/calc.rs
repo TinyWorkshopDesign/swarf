@@ -3,15 +3,52 @@
 //! Models:
 //! - radial chip thinning (ae < Ø/2) and lead-angle / ball-nose thinning;
 //! - mean chip thickness and Kienzle specific force (kc = kc1.1 · hm^-mc);
-//! - milling power Pc = ap·ae·vf·kc / 6·10⁷ (kW), drilling Pc = f·vc·Ø·kc / 240 000;
+//! - milling power Pc = ap·ae·vf·kc / 6·10⁷ (kW), with the Sandvik rake correction
+//!   kc·(1 − γ/100); drilling Pc = f·vc·Ø·kc / 240 000;
 //! - tool deflection as a two-segment cantilever (shank + flutes at 0.8·Ø).
 
 use crate::data::*;
+use crate::units::Units;
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 
 /// Spindle mechanical efficiency: cutting power = spindle power · η.
 pub const SPINDLE_EFF: f64 = 0.85;
+
+/// Feed per tooth in a full slot (Kennametal: reduce fz by 20 % for slotting).
+pub const SLOT_FZ: f64 = 0.8;
+
+/// Cutting speed factor in a full slot (more heat in the edge).
+pub const SLOT_VC: f64 = 0.9;
+
+/// HSM cutting speed factor against radial engagement ae/Ø, from the Kennametal
+/// solid end mill tables (lower end of each range); 1 at 50 % and above.
+const HSM_VC: &[(f64, f64)] = &[
+    (0.02, 2.1),
+    (0.04, 1.6),
+    (0.08, 1.6),
+    (0.10, 1.4),
+    (0.12, 1.38),
+    (0.20, 1.3),
+    (0.30, 1.2),
+    (0.40, 1.1),
+    (0.50, 1.0),
+];
+
+/// Cutting speed factor for high-speed machining at radial engagement `rr` = ae/Ø.
+pub fn hsm_vc_factor(rr: f64) -> f64 {
+    let p = HSM_VC;
+    if rr <= p[0].0 {
+        return p[0].1;
+    }
+    for w in p.windows(2) {
+        let ((x0, y0), (x1, y1)) = (w[0], w[1]);
+        if rr <= x1 {
+            return y0 + (y1 - y0) * (rr - x0) / (x1 - x0);
+        }
+    }
+    1.0
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -112,6 +149,9 @@ pub struct Cut {
     pub ap: f64,
     pub ae: f64,
     pub chip_thinning: bool,
+    /// High-speed machining: constant low engagement (trochoidal, adaptive) allows a
+    /// higher cutting speed.
+    pub hsm: bool,
     pub limit_deflection: bool,
     pub deflection_limit: f64,
     pub limit_power: bool,
@@ -123,6 +163,7 @@ impl Default for Cut {
             ap: 6.0,
             ae: 1.2,
             chip_thinning: true,
+            hsm: false,
             limit_deflection: true,
             deflection_limit: 0.025,
             limit_power: true,
@@ -154,6 +195,23 @@ impl Tweaks {
     }
 }
 
+/// Spindle speed set by hand instead of the recommended one.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub enum SpeedSet {
+    Rpm(f64),
+    /// Cutting speed, m/min.
+    Vc(f64),
+}
+
+/// Feed set by hand instead of the recommended one.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub enum FeedSet {
+    /// Feed per tooth (milling) or per revolution (drilling), mm.
+    PerTooth(f64),
+    /// Table feed, mm/min.
+    Feed(f64),
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Setup {
@@ -162,6 +220,12 @@ pub struct Setup {
     pub tool: Tool,
     pub cut: Cut,
     pub tweaks: Tweaks,
+    /// Workpiece hardness (HB, or HRC for hardened steel); None = the material's nominal.
+    pub hardness: Option<f64>,
+    /// Speed and feed typed by the user. The other values follow from them, and the
+    /// automatic reductions for power and deflection no longer apply.
+    pub speed_set: Option<SpeedSet>,
+    pub feed_set: Option<FeedSet>,
 }
 
 impl Default for Setup {
@@ -172,6 +236,9 @@ impl Default for Setup {
             tool: Tool::default(),
             cut: Cut::default(),
             tweaks: Tweaks::default(),
+            hardness: None,
+            speed_set: None,
+            feed_set: None,
         }
     }
 }
@@ -179,6 +246,34 @@ impl Default for Setup {
 impl Setup {
     pub fn material(&self) -> &'static Material {
         material(&self.material_id)
+    }
+
+    pub fn is_manual(&self) -> bool {
+        self.speed_set.is_some() || self.feed_set.is_some()
+    }
+
+    pub fn clear_manual(&mut self) {
+        self.speed_set = None;
+        self.feed_set = None;
+    }
+
+    /// Workpiece hardness used in the calculation, kept inside the table's range.
+    pub fn hardness(&self) -> f64 {
+        let m = self.material();
+        match (self.hardness, m.hardness_curve) {
+            (Some(h), Some(c)) => {
+                let (lo, hi) = c.range(m.hardness);
+                h.clamp(lo, hi)
+            }
+            _ => m.hardness,
+        }
+    }
+
+    /// Cutting speed factor for the hardness difference from nominal.
+    pub fn hardness_factor(&self) -> f64 {
+        let m = self.material();
+        m.hardness_curve
+            .map_or(1.0, |c| c.factor(self.hardness() - m.hardness))
     }
 
     /// Sets ap and ae for a strategy, based on material and tool.
@@ -246,6 +341,7 @@ impl Setup {
         }
         self.cut.ap = round2(ap);
         self.cut.ae = round2(ae);
+        self.cut.hsm = st == Strategy::Hsm;
     }
 }
 
@@ -331,10 +427,15 @@ pub enum Step {
     VcBase(ToolMaterial),
     Drilling,
     Coating(Coating),
+    Hardness {
+        value: f64,
+        nominal: f64,
+        hrc: bool,
+    },
     FullSlot,
     Engagement {
         pct: f64,
-        cooler: bool,
+        hsm: bool,
     },
     LifeTweak,
     VcTarget,
@@ -358,6 +459,10 @@ pub enum Step {
     ThinningCapped,
     Reduction(Limiter),
     FzProgrammed,
+    /// Cutting speed resulting from a speed set by hand.
+    ManualSpeed,
+    /// Feed per tooth (or per rev) resulting from a feed set by hand.
+    ManualFeed,
     FnBase {
         cf: f64,
     },
@@ -432,21 +537,29 @@ impl Outcome {
     pub fn power_ok(&self) -> bool {
         self.spindle_kw <= self.avail_kw * 1.001
     }
-    pub fn gcode(&self) -> String {
-        let s = format!("S{} M3\n", self.rpm.round() as i64);
+    /// Ready G-code; in inches it starts with G20 and gives F in in/min.
+    pub fn gcode(&self, u: Units) -> String {
+        let inch = u.inch();
+        let head = if inch { "G20\n" } else { "" };
+        let s = format!("{head}S{} M3\n", self.rpm.round() as i64);
+        let f = if inch {
+            trim_num(u.feed(self.feed), 1)
+        } else {
+            (self.feed.round() as i64).to_string()
+        };
         match &self.drill {
             Some(dr) => {
-                let depth = trim_num(dr.depth, 3);
+                let depth = trim_num(u.len(dr.depth), if inch { 4 } else { 3 });
+                let r = trim_num(u.len(1.0), 2);
                 match dr.peck {
                     Some(q) => format!(
-                        "{s}G83 Z-{depth} R1. Q{} F{}",
-                        trim_num(q, 1),
-                        self.feed.round() as i64
+                        "{s}G83 Z-{depth} R{r} Q{} F{f}",
+                        trim_num(u.len(q), if inch { 3 } else { 1 }),
                     ),
-                    None => format!("{s}G81 Z-{depth} R1. F{}", self.feed.round() as i64),
+                    None => format!("{s}G81 Z-{depth} R{r} F{f}"),
                 }
             }
-            None => format!("{s}G1 F{}", self.feed.round() as i64),
+            None => format!("{s}G1 F{f}"),
         }
     }
     pub fn plunge_feed(&self) -> f64 {
@@ -548,6 +661,7 @@ pub fn compute(s: &Setup) -> Outcome {
         vc_base = m.vc_carbide * 0.2;
     }
     let coat_m = tool.coating.vc_factor(g);
+    let hard_m = s.hardness_factor();
     if tool.coating == Coating::AlTiN && g == Iso::N {
         log.warn(Level::Warn, Msg::AlTiNOnAluminium);
     }
@@ -577,19 +691,28 @@ pub fn compute(s: &Setup) -> Outcome {
 
     if tool.kind == ToolKind::Drill {
         let depth = s.cut.ap.max(0.01);
-        let vc_t = vc_base * 0.7 * coat_m * life_m;
+        let drill_vc = g.drill_vc();
+        let vc_t = vc_base * drill_vc * coat_m * hard_m * life_m;
         log.row(Step::VcBase(tool.material), vc_base, Unit::MPerMin, 0);
-        log.factor(Step::Drilling, 0.7);
+        log.factor(Step::Drilling, drill_vc);
         log.factor(Step::Coating(tool.coating), coat_m);
+        log_hardness(&mut log, s, hard_m);
         log.factor(Step::LifeTweak, life_m);
         log.total(Step::VcTarget, vc_t, Unit::MPerMin, 0);
 
-        let n = clamp_rpm(vc_t * 1000.0 / (PI * d), &mut limiters);
+        let n = clamp_rpm(
+            manual_rpm(s, d).unwrap_or(vc_t * 1000.0 / (PI * d)),
+            &mut limiters,
+        );
         let vc = PI * d * n / 1000.0;
-        let fn_t = m.cf * 2.5 * dterm(d) * tm_f * rigid_f * fin_m;
+        if s.speed_set.is_some() {
+            log.total(Step::ManualSpeed, vc, Unit::MPerMin, 0);
+        }
+        let cf_drill = m.cf * 2.5 * g.drill_fn();
+        let fn_t = cf_drill * dterm(d) * tm_f * rigid_f * fin_m;
         log.row(
-            Step::FnBase { cf: m.cf * 2.5 },
-            m.cf * 2.5 * dterm(d),
+            Step::FnBase { cf: cf_drill },
+            cf_drill * dterm(d),
             Unit::MmPerRev,
             3,
         );
@@ -607,22 +730,33 @@ pub fn compute(s: &Setup) -> Outcome {
             (vf, kc, pc, torque, thrust)
         };
         let pav = avail(n);
-        let mut k = 1.0f64;
-        let (vf0, _, pc0, _, _) = phys(fn_t);
-        if vf0 > feed_max {
-            k = k.min(feed_max / vf0);
-            limiters.push(Limiter::FeedMax);
-        }
-        if s.cut.limit_power && pc0 > pav && pav > 0.0 {
-            k = k.min((pav / pc0).powf(ex));
-            limiters.push(Limiter::Power);
-        }
-        let f = fn_t * k;
+        let f = if let Some(f) = manual_per_tooth(s, n, 1) {
+            let f = if f * n > feed_max {
+                limiters.push(Limiter::FeedMax);
+                feed_max / n
+            } else {
+                f
+            };
+            log.total(Step::ManualFeed, f, Unit::MmPerRev, 3);
+            f
+        } else {
+            let mut k = 1.0f64;
+            let (vf0, _, pc0, _, _) = phys(fn_t);
+            if vf0 > feed_max {
+                k = k.min(feed_max / vf0);
+                limiters.push(Limiter::FeedMax);
+            }
+            if s.cut.limit_power && pc0 > pav && pav > 0.0 {
+                k = k.min((pav / pc0).powf(ex));
+                limiters.push(Limiter::Power);
+            }
+            if k < 1.0 {
+                let l = *limiters.last().unwrap_or(&Limiter::FeedMax);
+                log.factor(Step::Reduction(l), k);
+            }
+            fn_t * k
+        };
         let (vf, kc, pc, torque, thrust) = phys(f);
-        if k < 1.0 {
-            let l = *limiters.last().unwrap_or(&Limiter::FeedMax);
-            log.factor(Step::Reduction(l), k);
-        }
         let ratio = depth / d;
         let peck = (ratio > 3.0).then(|| d * if g == Iso::N { 1.5 } else { 1.0 });
         if pc > pav * 1.001 {
@@ -723,24 +857,27 @@ pub fn compute(s: &Setup) -> Outcome {
     let rr = ae_e / d_eff;
     let area = area.unwrap_or(ap * ae_e);
 
-    // Narrow cuts leave the edge time to cool, so speed can rise; a full slot runs hotter.
+    // A full slot runs hotter. With HSM the narrow cut leaves the edge time to cool,
+    // so speed can rise (Kennametal engagement factors).
+    let hsm = s.cut.hsm && matches!(tool.kind, ToolKind::Flat | ToolKind::Ball | ToolKind::Bull);
     let ae_boost = if rr >= 0.99 {
-        0.9
-    } else if rr >= 0.5 {
-        1.0
+        SLOT_VC
+    } else if hsm {
+        hsm_vc_factor(rr)
     } else {
-        1.0 + 0.4 * ((0.5 - rr) / 0.4).min(1.0)
+        1.0
     };
-    let vc_t = vc_base * coat_m * ae_boost * life_m;
+    let vc_t = vc_base * coat_m * hard_m * ae_boost * life_m;
     log.row(Step::VcBase(tool.material), vc_base, Unit::MPerMin, 0);
     log.factor(Step::Coating(tool.coating), coat_m);
+    log_hardness(&mut log, s, hard_m);
     if rr >= 0.99 {
         log.factor(Step::FullSlot, ae_boost);
     } else {
         log.factor(
             Step::Engagement {
                 pct: rr * 100.0,
-                cooler: rr < 0.5,
+                hsm,
             },
             ae_boost,
         );
@@ -751,8 +888,14 @@ pub fn compute(s: &Setup) -> Outcome {
         log.row(Step::EffectiveDiameter, d_eff, Unit::Mm, 2);
     }
 
-    let n = clamp_rpm(vc_t * 1000.0 / (PI * d_eff), &mut limiters);
+    let n = clamp_rpm(
+        manual_rpm(s, d_eff).unwrap_or(vc_t * 1000.0 / (PI * d_eff)),
+        &mut limiters,
+    );
     let vc = PI * d_eff * n / 1000.0;
+    if s.speed_set.is_some() {
+        log.total(Step::ManualSpeed, vc, Unit::MPerMin, 0);
+    }
 
     let fz_base = if tool.kind == ToolKind::Face {
         g.face_fz()
@@ -760,7 +903,7 @@ pub fn compute(s: &Setup) -> Outcome {
         m.cf * dterm(d)
     };
     let slot = rr >= 0.99;
-    let slot_f = if slot { 0.85 } else { 1.0 };
+    let slot_f = if slot { SLOT_FZ } else { 1.0 };
     let fz_t = fz_base * tm_f * rigid_f * fin_m * slot_f;
     if tool.kind == ToolKind::Face {
         log.row(Step::FzBaseInsert, fz_base, Unit::Mm, 3);
@@ -814,10 +957,11 @@ pub fn compute(s: &Setup) -> Outcome {
     let phi = (1.0 - 2.0 * rr).clamp(-1.0, 1.0).acos(); // engagement angle
     let sin_k = kappa.to_radians().sin();
     let is_face = tool.kind == ToolKind::Face;
+    let rake_m = 1.0 - g.rake_deg() / 100.0;
     let phys = |fz: f64| {
         let vf = fz * z as f64 * n;
         let hm = (2.0 * sin_k * ae_e * fz / (d_eff * phi)).max(1e-5);
-        let kc = m.kc * hm.powf(-m.mc);
+        let kc = m.kc * hm.powf(-m.mc) * rake_m;
         let pc = area * vf * kc / 6.0e7;
         let torque = pc * 9549.0 / n;
         let force = 2000.0 * torque / d_eff;
@@ -830,27 +974,38 @@ pub fn compute(s: &Setup) -> Outcome {
     };
     let pav = avail(n);
     let dlim = s.cut.deflection_limit.max(0.0005);
-    let (vf0, _, pc0, _, _, defl0) = phys(fz_p);
     let mut reasons: Vec<(Limiter, f64)> = Vec::new();
-    if vf0 > feed_max {
-        reasons.push((Limiter::FeedMax, feed_max / vf0));
-    }
-    if s.cut.limit_power && pc0 > pav && pav > 0.0 {
-        reasons.push((Limiter::Power, (pav / pc0).powf(ex)));
-    }
-    if s.cut.limit_deflection && !is_face && defl0 > dlim {
-        reasons.push((Limiter::Deflection, (dlim / defl0).powf(ex)));
-    }
-    reasons.sort_by(|a, b| a.1.total_cmp(&b.1));
-    let k = reasons.first().map(|r| r.1).unwrap_or(1.0).min(1.0);
-    if let Some((l, _)) = reasons.first() {
-        limiters.push(*l);
-        log.factor(Step::Reduction(*l), k);
-    }
-    let fz = fz_p * k;
+    let (fz, k, chip) = if let Some(f) = manual_per_tooth(s, n, z) {
+        let f = if f * z as f64 * n > feed_max {
+            limiters.push(Limiter::FeedMax);
+            feed_max / (z as f64 * n)
+        } else {
+            f
+        };
+        log.total(Step::ManualFeed, f, Unit::Mm, 4);
+        (f, 1.0, f / thin)
+    } else {
+        let (vf0, _, pc0, _, _, defl0) = phys(fz_p);
+        if vf0 > feed_max {
+            reasons.push((Limiter::FeedMax, feed_max / vf0));
+        }
+        if s.cut.limit_power && pc0 > pav && pav > 0.0 {
+            reasons.push((Limiter::Power, (pav / pc0).powf(ex)));
+        }
+        if s.cut.limit_deflection && !is_face && defl0 > dlim {
+            reasons.push((Limiter::Deflection, (dlim / defl0).powf(ex)));
+        }
+        reasons.sort_by(|a, b| a.1.total_cmp(&b.1));
+        let k = reasons.first().map(|r| r.1).unwrap_or(1.0).min(1.0);
+        if let Some((l, _)) = reasons.first() {
+            limiters.push(*l);
+            log.factor(Step::Reduction(*l), k);
+        }
+        let fz = fz_p * k;
+        log.total(Step::FzProgrammed, fz, Unit::Mm, 4);
+        (fz, k, fz_t * k)
+    };
     let (vf, kc, pc, torque, force, defl) = phys(fz);
-    log.total(Step::FzProgrammed, fz, Unit::Mm, 4);
-    let chip = fz_t * k;
 
     // warnings
     let min_chip = if metal {
@@ -947,6 +1102,42 @@ pub fn compute(s: &Setup) -> Outcome {
     }
 }
 
+/// Spindle speed from a speed set by hand, for cutting diameter `d`.
+fn manual_rpm(s: &Setup, d: f64) -> Option<f64> {
+    s.speed_set.map(|v| match v {
+        SpeedSet::Rpm(n) => n,
+        SpeedSet::Vc(vc) => vc * 1000.0 / (PI * d.max(0.01)),
+    })
+}
+
+/// Feed per tooth (or per rev with `z` = 1) from a feed set by hand, at speed `n`.
+fn manual_per_tooth(s: &Setup, n: f64, z: u32) -> Option<f64> {
+    s.feed_set.map(|v| {
+        match v {
+            FeedSet::PerTooth(f) => f,
+            FeedSet::Feed(vf) => vf / (z.max(1) as f64 * n.max(1.0)),
+        }
+        .max(1e-6)
+    })
+}
+
+fn log_hardness(log: &mut Log, s: &Setup, factor: f64) {
+    let m = s.material();
+    if let Some(c) = m.hardness_curve {
+        let value = s.hardness();
+        if (value - m.hardness).abs() > 1e-9 {
+            log.factor(
+                Step::Hardness {
+                    value,
+                    nominal: m.hardness,
+                    hrc: c.hrc,
+                },
+                factor,
+            );
+        }
+    }
+}
+
 fn rpm_warnings(log: &mut Log, n: f64, rpm_max: f64, rpm_min: f64, vc: f64, vc_t: f64) {
     if n >= rpm_max && vc < vc_t * 0.7 {
         log.warn(
@@ -994,6 +1185,7 @@ pub fn sweep(s: &Setup, var: SweepVar, steps: usize) -> Vec<SweepPoint> {
     for i in 0..steps {
         let t = i as f64 / (steps - 1) as f64;
         let mut c = s.clone();
+        c.clear_manual();
         let x = match var {
             SweepVar::Radial => {
                 let pct = 2.0 + t * 98.0;
@@ -1109,7 +1301,7 @@ mod tests {
         s.machine = Machine::from_preset(MachinePreset::Vmc);
         s.cut.ap = 30.0;
         let o = compute(&s);
-        assert!(o.gcode().contains("G83"));
+        assert!(o.gcode(Units::Metric).contains("G83"));
         assert!(
             o.warnings
                 .iter()
@@ -1136,6 +1328,262 @@ mod tests {
             pts.iter()
                 .all(|p| p.mrr.is_finite() && p.spindle_kw.is_finite())
         );
+    }
+
+    #[test]
+    fn hsm_raises_speed_only_when_enabled() {
+        let mut s = Setup::default();
+        s.machine = Machine::from_preset(MachinePreset::Vmc);
+        s.material_id = "c45".into();
+        s.cut.ae = s.tool.d * 0.1;
+        let off = compute(&s);
+        s.cut.hsm = true;
+        let on = compute(&s);
+        // Kennametal: ×1.4 at 10 % engagement
+        assert!(close(on.vc_target / off.vc_target, 1.4, 1e-9));
+        assert!(close(hsm_vc_factor(0.2), 1.3, 1e-9));
+        assert!(close(hsm_vc_factor(0.5), 1.0, 1e-9));
+        assert!(close(hsm_vc_factor(0.9), 1.0, 1e-9));
+    }
+
+    #[test]
+    fn hsm_strategy_turns_hsm_on() {
+        let mut s = Setup::default();
+        s.apply_strategy(Strategy::Hsm);
+        assert!(s.cut.hsm);
+        s.apply_strategy(Strategy::Rough);
+        assert!(!s.cut.hsm);
+    }
+
+    #[test]
+    fn slot_reduces_feed_by_20_percent() {
+        let mut s = Setup::default();
+        s.machine = Machine::from_preset(MachinePreset::Vmc);
+        s.material_id = "c45".into();
+        s.cut.ae = s.tool.d * 0.5;
+        let side = compute(&s);
+        s.cut.ae = s.tool.d;
+        let slot = compute(&s);
+        assert!(close(slot.chip_target / side.chip_target, SLOT_FZ, 1e-9));
+    }
+
+    #[test]
+    fn hardness_follows_sandvik_table() {
+        let mut s = Setup::default();
+        s.material_id = "42crmo4".into();
+        assert!(close(s.hardness_factor(), 1.0, 1e-9));
+        s.hardness = Some(320.0); // +40 HB on low-alloy steel
+        assert!(close(s.hardness_factor(), 0.91, 1e-9));
+        s.hardness = Some(1000.0); // clamped to the end of the table, +80 HB
+        assert!(close(s.hardness(), 360.0, 1e-9));
+        assert!(close(s.hardness_factor(), 0.83, 1e-9));
+        s.material_id = "al6061".into();
+        assert!(close(s.hardness_factor(), 1.0, 1e-9));
+    }
+
+    #[test]
+    fn power_matches_sandvik_example() {
+        // Sandvik constant K for CMC 01.1 at ae/Dc 0.4, fz 0.1: 6.2 (η 0.8, 0° rake),
+        // i.e. kc ≈ 6.2 · 480 = 2976 N/mm². Swarf's kc with the rake removed must agree.
+        let mut s = Setup::default();
+        s.material_id = "s235".into();
+        s.machine = Machine::from_preset(MachinePreset::Vmc);
+        s.tool.d = 10.0;
+        s.tool.z = 4;
+        s.cut.ae = 4.0;
+        s.cut.limit_deflection = false;
+        s.cut.chip_thinning = false;
+        let o = compute(&s);
+        let kc0 = o.kc / (1.0 - Iso::P.rake_deg() / 100.0);
+        let hm = 2.0 * 0.4 * o.fz / 0.2f64.acos(); // mean chip at ae/Dc 0.4
+        let kc_sandvik_at_hm = 2976.0 * (hm / 0.0584).powf(-0.25);
+        assert!(
+            close(kc0, kc_sandvik_at_hm, 0.05),
+            "{kc0} vs {kc_sandvik_at_hm}"
+        );
+    }
+
+    /// Swarf against the published Kennametal start data, Ø10 carbide on a rigid machine.
+    /// End mills: GOmill PRO (TiN/TiAlN), side milling at 0.4·Ø. Drills: GOdrill 3xD.
+    #[test]
+    fn matches_kennametal_tables() {
+        let setup = |id: &str, kind: ToolKind, coating: Coating| {
+            let mut s = Setup::default();
+            s.material_id = id.into();
+            s.machine = Machine {
+                rpm_max: 60000.0,
+                feed_max: 1e6,
+                kw: 1000.0,
+                rpm_base: 1.0,
+                ..Machine::from_preset(MachinePreset::Vmc)
+            };
+            s.tool.kind = kind;
+            s.tool.coating = coating;
+            s.tool.d = 10.0;
+            s.tool.shank_d = 10.0;
+            s.tool.flute_len = 30.0;
+            s.tool.stickout = 40.0;
+            s.cut.ae = 4.0;
+            s.cut.ap = if kind == ToolKind::Drill { 30.0 } else { 10.0 };
+            s.cut.limit_deflection = false;
+            s.cut.limit_power = false;
+            s
+        };
+        // material, Vc range, fz start
+        let mills = [
+            ("s235", 150.0, 200.0, 0.072),
+            ("c45", 140.0, 190.0, 0.072),
+            ("42crmo4", 120.0, 160.0, 0.061),
+            ("ss304", 90.0, 115.0, 0.061),
+            ("gg25", 120.0, 150.0, 0.072),
+            ("ggg50", 110.0, 140.0, 0.061),
+            ("ti64", 50.0, 60.0, 0.045),
+            ("in718", 25.0, 40.0, 0.032),
+            ("h50", 70.0, 120.0, 0.040),
+        ];
+        for (id, lo, hi, fz) in mills {
+            let o = compute(&setup(id, ToolKind::Flat, Coating::AlTiN));
+            assert!(
+                o.vc >= lo && o.vc <= hi,
+                "{id}: Vc {} not in {lo}–{hi}",
+                o.vc
+            );
+            assert!(
+                close(o.chip_target, fz, 0.15),
+                "{id}: fz {} vs {fz}",
+                o.chip_target
+            );
+        }
+        // material, coating, Vc range, fn range
+        let drills = [
+            ("s235", Coating::AlTiN, 60.0, 100.0, 0.15, 0.31),
+            ("c45", Coating::AlTiN, 80.0, 100.0, 0.17, 0.31),
+            ("42crmo4", Coating::AlTiN, 50.0, 90.0, 0.19, 0.33),
+            ("ss304", Coating::AlTiN, 20.0, 40.0, 0.10, 0.14),
+            ("gg25", Coating::AlTiN, 80.0, 170.0, 0.23, 0.44),
+            ("ggg50", Coating::AlTiN, 90.0, 120.0, 0.23, 0.36),
+            ("ti64", Coating::AlTiN, 20.0, 50.0, 0.08, 0.11),
+            ("in718", Coating::AlTiN, 20.0, 40.0, 0.07, 0.10),
+            ("h50", Coating::AlTiN, 10.0, 30.0, 0.07, 0.10),
+            ("al6061", Coating::None, 90.0, 270.0, 0.20, 0.28),
+        ];
+        for (id, coat, lo, hi, f_lo, f_hi) in drills {
+            let o = compute(&setup(id, ToolKind::Drill, coat));
+            assert!(
+                o.vc >= lo && o.vc <= hi,
+                "{id}: drill Vc {} not in {lo}–{hi}",
+                o.vc
+            );
+            // Swarf may sit a little under the range (conservative), never above it.
+            assert!(
+                o.fz >= f_lo * 0.75 && o.fz <= f_hi * 1.05,
+                "{id}: drill fn {} vs {f_lo}–{f_hi}",
+                o.fz
+            );
+        }
+    }
+
+    #[test]
+    fn manual_speed_and_feed_are_linked() {
+        let mut s = Setup::default();
+        s.machine = Machine::from_preset(MachinePreset::Vmc);
+        s.material_id = "c45".into();
+        let rec = compute(&s);
+        // RPM by hand: Vc follows, fz stays the recommended one, F follows.
+        s.speed_set = Some(SpeedSet::Rpm(2000.0));
+        let o = compute(&s);
+        assert_eq!(o.rpm, 2000.0);
+        assert!(close(o.vc, PI * s.tool.d * 2000.0 / 1000.0, 1e-9));
+        assert!(close(o.fz, rec.fz, 1e-9));
+        assert!(close(o.feed, rec.fz * s.tool.z as f64 * 2000.0, 1e-9));
+        // F by hand: fz follows the speed.
+        s.feed_set = Some(FeedSet::Feed(600.0));
+        let o = compute(&s);
+        assert!(close(o.feed, 600.0, 1e-9));
+        assert!(close(o.fz, 600.0 / (s.tool.z as f64 * 2000.0), 1e-9));
+        // Vc and fz by hand.
+        s.speed_set = Some(SpeedSet::Vc(100.0));
+        s.feed_set = Some(FeedSet::PerTooth(0.05));
+        let o = compute(&s);
+        assert!(close(o.vc, 100.0, 0.01));
+        assert!(close(o.fz, 0.05, 1e-9));
+        assert!(o.why.iter().any(|r| r.step == Step::ManualFeed));
+        // Machine limits still apply.
+        s.speed_set = Some(SpeedSet::Rpm(1e6));
+        s.feed_set = Some(FeedSet::Feed(1e7));
+        let o = compute(&s);
+        assert_eq!(o.rpm, s.machine.rpm_max);
+        assert!(close(o.feed, s.machine.feed_max, 1e-9));
+        s.clear_manual();
+        assert!(close(compute(&s).feed, rec.feed, 1e-9));
+    }
+
+    #[test]
+    fn manual_feed_skips_reductions_but_warns() {
+        let mut s = Setup::default();
+        s.material_id = "ss304".into();
+        s.machine = Machine::from_preset(MachinePreset::Bench);
+        s.tool.d = 12.0;
+        s.tool.shank_d = 12.0;
+        s.tool.flute_len = 30.0;
+        s.tool.stickout = 40.0;
+        s.apply_strategy(Strategy::Slot);
+        let rec = compute(&s);
+        assert!(rec.power_ok());
+        // Four times the chip: the automatic power reduction would cut it back.
+        s.feed_set = Some(FeedSet::PerTooth(rec.fz * 4.0));
+        let o = compute(&s);
+        assert!(close(o.fz, rec.fz * 4.0, 1e-9));
+        assert!(!o.limiters.contains(&Limiter::Power));
+        assert!(
+            o.warnings
+                .iter()
+                .any(|w| matches!(w.msg, Msg::PowerShort { .. }))
+        );
+    }
+
+    #[test]
+    fn manual_drill_feed() {
+        let mut s = Setup::default();
+        s.tool.kind = ToolKind::Drill;
+        s.machine = Machine::from_preset(MachinePreset::Vmc);
+        s.material_id = "c45".into();
+        s.cut.ap = 10.0;
+        s.feed_set = Some(FeedSet::PerTooth(0.12));
+        s.speed_set = Some(SpeedSet::Rpm(1500.0));
+        let o = compute(&s);
+        assert!(close(o.fz, 0.12, 1e-9));
+        assert!(close(o.feed, 180.0, 1e-9));
+    }
+
+    #[test]
+    fn gcode_in_inches() {
+        let mut s = Setup::default();
+        s.speed_set = Some(SpeedSet::Rpm(10000.0));
+        s.feed_set = Some(FeedSet::Feed(2540.0));
+        let o = compute(&s);
+        assert_eq!(o.gcode(Units::Metric), "S10000 M3\nG1 F2540");
+        assert_eq!(o.gcode(Units::Inch), "G20\nS10000 M3\nG1 F100.");
+        s.tool.kind = ToolKind::Drill;
+        s.machine = Machine::from_preset(MachinePreset::Vmc);
+        s.tool.d = 6.35;
+        s.cut.ap = 25.4;
+        let o = compute(&s);
+        let g = o.gcode(Units::Inch);
+        // aluminium: peck 1.5·Ø = 0.375 in
+        assert!(g.contains("G83 Z-1. R0.04 Q0.375 F100."), "{g}");
+    }
+
+    #[test]
+    fn manual_values_survive_json() {
+        let mut s = Setup::default();
+        s.speed_set = Some(SpeedSet::Vc(120.0));
+        s.feed_set = Some(FeedSet::Feed(800.0));
+        let j = serde_json::to_string(&s).unwrap();
+        assert_eq!(serde_json::from_str::<Setup>(&j).unwrap(), s);
+        // Setups saved before this field existed still load.
+        let old = r#"{"material_id":"c45"}"#;
+        assert!(!serde_json::from_str::<Setup>(old).unwrap().is_manual());
     }
 
     #[test]

@@ -3,3 +3,6 @@
 # Conflict copies made by the folder sync
 *.sync-conflict-*
 .DS_Store
+
+# Local comparison with third-party calculators (not to be published)
+/confronto-locale/
