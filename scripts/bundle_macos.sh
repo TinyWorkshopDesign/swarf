@@ -3,7 +3,7 @@
 # BIN=path/to/swarf uses an already built binary (CI passes a universal one).
 set -e
 cd "$(dirname "$0")/.."
-BUNDLE_ID="${BUNDLE_ID:-io.github.swarf}"
+BUNDLE_ID="${BUNDLE_ID:-io.github.TinyWorkshopDesign.swarf}"
 VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
 
 if [ -z "$BIN" ]; then

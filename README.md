@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/OWNER/swarf/actions/workflows/build.yml"><img src="https://github.com/OWNER/swarf/actions/workflows/build.yml/badge.svg" alt="Build status"></a>
-  <a href="https://github.com/OWNER/swarf/releases/latest"><img src="https://img.shields.io/github/v/release/OWNER/swarf" alt="Latest release"></a>
+  <a href="https://github.com/TinyWorkshopDesign/swarf/actions/workflows/build.yml"><img src="https://github.com/TinyWorkshopDesign/swarf/actions/workflows/build.yml/badge.svg" alt="Build status"></a>
+  <a href="https://github.com/TinyWorkshopDesign/swarf/releases/latest"><img src="https://img.shields.io/github/v/release/TinyWorkshopDesign/swarf" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License: GPL-3.0"></a>
 </p>
 
@@ -36,7 +36,7 @@ Pick your machine, material, tool and cut. Swarf gives you spindle speed and fee
 
 ## Download
 
-Get the latest build for your system from the [Releases page](https://github.com/OWNER/swarf/releases/latest):
+Get the latest build for your system from the [Releases page](https://github.com/TinyWorkshopDesign/swarf/releases/latest):
 
 | System | File | How to run |
 |---|---|---|
@@ -49,7 +49,7 @@ Get the latest build for your system from the [Releases page](https://github.com
 Install Rust 1.95 or newer from [rustup.rs](https://rustup.rs), then:
 
 ```bash
-git clone https://github.com/OWNER/swarf.git
+git clone https://github.com/TinyWorkshopDesign/swarf.git
 ```
 
 ```bash
