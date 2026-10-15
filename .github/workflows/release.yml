@@ -27,7 +27,7 @@ jobs:
           BIN=target/release/swarf-universal ./scripts/bundle_macos.sh
           hdiutil create -volname "Swarf" -srcfolder target/release/Swarf.app -ov -format UDZO \
             "Swarf-${GITHUB_REF_NAME}-macos.dmg"
-          cd target/release && ditto -c -k --keepParent Swarf.app "Swarf-${GITHUB_REF_NAME}-macos.zip"
+          ditto -c -k --keepParent target/release/Swarf.app "Swarf-${GITHUB_REF_NAME}-macos.zip"
       - name: Per-architecture .dmg and .zip
         run: |
           build_arch() {
@@ -35,7 +35,7 @@ jobs:
             BIN="target/$target/release/swarf" ./scripts/bundle_macos.sh
             hdiutil create -volname "Swarf" -srcfolder target/release/Swarf.app -ov -format UDZO \
               "Swarf-${GITHUB_REF_NAME}-macos-${label}.dmg"
-            ( cd target/release && ditto -c -k --keepParent Swarf.app "Swarf-${GITHUB_REF_NAME}-macos-${label}.zip" )
+            ditto -c -k --keepParent target/release/Swarf.app "Swarf-${GITHUB_REF_NAME}-macos-${label}.zip"
           }
           build_arch arm64 aarch64-apple-darwin
           build_arch x86_64 x86_64-apple-darwin
@@ -46,9 +46,9 @@ jobs:
             Swarf-*-macos.dmg
             Swarf-*-macos-arm64.dmg
             Swarf-*-macos-x86_64.dmg
-            target/release/Swarf-*-macos.zip
-            target/release/Swarf-*-macos-arm64.zip
-            target/release/Swarf-*-macos-x86_64.zip
+            Swarf-*-macos.zip
+            Swarf-*-macos-arm64.zip
+            Swarf-*-macos-x86_64.zip
 
   windows:
     strategy:
