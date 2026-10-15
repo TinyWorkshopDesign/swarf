@@ -1,8 +1,11 @@
-; NSIS installer for Swarf (Windows x64).
-; Pass /DVERSION=<tag> and /DROOT=<repo root> from the workflow.
+; NSIS installer for Swarf (Windows).
+; Pass /DVERSION=<tag>, /DARCH=<x64|arm64> and /DROOT=<repo root> from the workflow.
 
 !ifndef VERSION
   !define VERSION "0.0.0"
+!endif
+!ifndef ARCH
+  !define ARCH "x64"
 !endif
 !ifndef ROOT
   !define ROOT "."
@@ -10,7 +13,7 @@
 
 Unicode true
 Name "Swarf ${VERSION}"
-OutFile "${ROOT}\Swarf-${VERSION}-windows-x64-setup.exe"
+OutFile "${ROOT}\Swarf-${VERSION}-windows-${ARCH}-setup.exe"
 InstallDir "$PROGRAMFILES64\Swarf"
 InstallDirRegKey HKLM "Software\Swarf" "InstallDir"
 RequestExecutionLevel admin
