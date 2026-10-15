@@ -33,4 +33,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
+# The binary is only linker-signed (and lipo drops even that), which leaves the
+# bundle without a sealed signature: macOS then reports the app as "damaged".
+# Ad-hoc sign the assembled bundle so it validates.
+codesign --force --deep --sign - "$APP"
+codesign --verify --strict "$APP"
 echo "Built $APP"
